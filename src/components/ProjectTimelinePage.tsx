@@ -4,10 +4,10 @@ import { useAuth } from '../context/AuthContext';
 import { useProjects } from '../context/ProjectContext';
 import { Project } from '../types';
 import { 
-    ArrowLeft, Calendar, Flag, User, 
-    Printer, Download, Plus, Save, X, MoreHorizontal 
+    ArrowLeft, Calendar, User, 
+    Plus, Save, X, Edit2, Trash2, AlertCircle 
 } from 'lucide-react';
-import { message } from 'antd'; // ใช้ Alert ของ Antd
+import { message, Modal } from 'antd'; // ใช้ Alert และ Modal confirm
 
 // Interface ของ Feature
 interface ProjectFeature {
@@ -31,12 +31,13 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
     const { token, user } = useAuth();
     const { projects } = useProjects();
     const [project, setProject] = useState<Project | null>(null);
-    const [features, setFeatures] = useState<ProjectFeature[]>([]); // เก็บข้อมูลแผนงาน
+    const [features, setFeatures] = useState<ProjectFeature[]>([]); 
     const [loading, setLoading] = useState(true);
 
-    // Modal State
+    // Modal State สำหรับ Add/Edit
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [newFeature, setNewFeature] = useState({
+    const [editingId, setEditingId] = useState<number | null>(null); // ถ้ามีค่า = แก้ไข, null = เพิ่มใหม่
+    const [formData, setFormData] = useState({
         title: '', detail: '', next_list: '', status: 'PENDING',
         start_date: '', due_date: '', remark: ''
     });
@@ -62,7 +63,7 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
         }
     };
 
-    // --- Logic สร้าง Gantt Chart รายเดือน ---
+    // --- Logic สร้าง Timeline รายสัปดาห์ ---
     const getMonthRange = () => {
         if (!project) return [];
         const start = new Date(project.startDate);
@@ -71,8 +72,8 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
         const current = new Date(start);
         current.setDate(1); 
 
-        // สร้าง Loop เดือน ตั้งแต่เริ่ม จนจบ (หรืออย่างน้อย 6 เดือน)
-        while (current <= end || months.length < 6) {
+        // สร้าง Loop เดือน อย่างน้อย 4 เดือน หรือตามระยะเวลาโครงการ
+        while (current <= end || months.length < 4) {
             months.push(new Date(current));
             current.setMonth(current.getMonth() + 1);
         }
@@ -80,36 +81,111 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
     };
     const timelineMonths = getMonthRange();
 
-    // เช็คว่า Feature นี้ คลุมเดือนนี้หรือไม่ (เพื่อวาดแถบสี)
-    const isFeatureActiveInMonth = (feature: ProjectFeature, monthDate: Date) => {
+    // เช็คว่า Feature Active ในสัปดาห์นั้นหรือไม่
+    // weekIndex: 0=วันที่ 1-7, 1=วันที่ 8-14, 2=วันที่ 15-21, 3=วันที่ 22-สิ้นเดือน
+    const isFeatureActiveInWeek = (feature: ProjectFeature, monthDate: Date, weekIndex: number) => {
         const featStart = new Date(feature.start_date);
         const featEnd = new Date(feature.due_date);
-        const currentMonthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
-        const currentMonthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
+        
+        // หาวันเริ่มและวันจบของสัปดาห์นั้นๆ ในเดือนนั้น
+        const year = monthDate.getFullYear();
+        const month = monthDate.getMonth();
+        
+        let wStartDay = 1 + (weekIndex * 7);
+        let wEndDay = (weekIndex + 1) * 7;
+        
+        // สัปดาห์สุดท้าย (W4) ให้ครอบคลุมถึงวันสิ้นเดือน
+        if (weekIndex === 3) {
+            wEndDay = new Date(year, month + 1, 0).getDate();
+        }
 
-        // ตรวจสอบการทับซ้อนของช่วงเวลา
-        return (featStart <= currentMonthEnd && featEnd >= currentMonthStart);
+        const weekStartDate = new Date(year, month, wStartDay);
+        const weekEndDate = new Date(year, month, wEndDay);
+
+        // ตรวจสอบการทับซ้อน (Intersection)
+        // Feature เริ่มก่อนหรือพอดีจบสัปดาห์ AND Feature จบหลังหรือพอดีเริ่มสัปดาห์
+        return (featStart <= weekEndDate && featEnd >= weekStartDate);
     };
 
-    // Handle Create Feature
-    const handleCreateFeature = async (e: React.FormEvent) => {
+    // --- CRUD Handlers ---
+
+    // 1. เปิด Modal เพื่อเพิ่ม
+    const openAddModal = () => {
+        setEditingId(null);
+        setFormData({
+            title: '', detail: '', next_list: '', status: 'PENDING',
+            start_date: project?.startDate ? project.startDate.split('T')[0] : '', 
+            due_date: project?.endDate ? project.endDate.split('T')[0] : '', 
+            remark: ''
+        });
+        setIsModalOpen(true);
+    };
+
+    // 2. เปิด Modal เพื่อแก้ไข
+    const openEditModal = (feat: ProjectFeature) => {
+        setEditingId(feat.id);
+        setFormData({
+            title: feat.title,
+            detail: feat.detail,
+            next_list: feat.next_list,
+            status: feat.status,
+            start_date: feat.start_date ? feat.start_date.split('T')[0] : '',
+            due_date: feat.due_date ? feat.due_date.split('T')[0] : '',
+            remark: feat.remark
+        });
+        setIsModalOpen(true);
+    };
+
+    // 3. บันทึกข้อมูล (Add or Update)
+    const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!newFeature.title || !newFeature.start_date || !newFeature.due_date) {
-            message.warning('กรุณากรอกหัวข้อ, วันที่เริ่ม และวันที่สิ้นสุด');
+        if (!formData.title || !formData.start_date || !formData.due_date) {
+            message.warning('กรุณากรอกข้อมูลสำคัญให้ครบถ้วน');
             return;
         }
 
         try {
-            await axios.post(`https://saraban-backend.onrender.com/api/projects/${projectId}/features`, newFeature, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            message.success('เพิ่มแผนงานเรียบร้อยแล้ว');
+            if (editingId) {
+                // Update
+                await axios.put(`https://saraban-backend.onrender.com/api/features/${editingId}`, formData, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                message.success('แก้ไขแผนงานเรียบร้อยแล้ว');
+            } else {
+                // Create
+                await axios.post(`https://saraban-backend.onrender.com/api/projects/${projectId}/features`, formData, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                message.success('เพิ่มแผนงานใหม่เรียบร้อยแล้ว');
+            }
             setIsModalOpen(false);
-            setNewFeature({ title: '', detail: '', next_list: '', status: 'PENDING', start_date: '', due_date: '', remark: '' }); // Reset Form
-            fetchFeatures(); // Reload Data
+            fetchFeatures();
         } catch (error) {
             message.error('เกิดข้อผิดพลาดในการบันทึก');
         }
+    };
+
+    // 4. ลบข้อมูล
+    const handleDelete = (id: number) => {
+        Modal.confirm({
+            title: 'ยืนยันการลบ',
+            content: 'คุณต้องการลบแผนงานนี้ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้',
+            okText: 'ลบ',
+            okType: 'danger',
+            cancelText: 'ยกเลิก',
+            icon: <AlertCircle className="text-red-500" />,
+            onOk: async () => {
+                try {
+                    await axios.delete(`https://saraban-backend.onrender.com/api/features/${id}`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    message.success('ลบข้อมูลเรียบร้อยแล้ว');
+                    fetchFeatures();
+                } catch (error) {
+                    message.error('ไม่สามารถลบข้อมูลได้');
+                }
+            }
+        });
     };
 
     const formatDate = (dateStr: string) => {
@@ -133,73 +209,88 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
                             {project.name}
                             <span className="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700 border border-blue-200">{project.status}</span>
                         </h1>
-                        <p className="text-sm text-gray-500">Code: {project.code} | Manager: {project.owner}</p>
+                        <p className="text-sm text-gray-500">Code: {project.code}</p>
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 shadow-sm font-medium">
-                        <Plus size={16} /> Add Activity / Feature
+                    <button onClick={openAddModal} className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 shadow-sm font-medium transition-all">
+                        <Plus size={16} /> Add Feature
                     </button>
                 </div>
             </div>
 
             <div className="px-6 space-y-6">
 
-                {/* --- 🟢 ส่วนที่ 1: Dynamic Gantt Chart --- */}
+                {/* --- 🟢 ส่วนที่ 1: Weekly Gantt Chart --- */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                     <div className="p-4 border-b bg-blue-50/50 flex justify-between items-center">
                         <h2 className="font-bold text-blue-800 flex items-center gap-2">
-                            <Calendar size={18} /> PROJECT PLAN TIMELINE
+                            <Calendar size={18} /> WEEKLY PROJECT PLAN
                         </h2>
                     </div>
                     
                     <div className="overflow-x-auto">
-                        <table className="w-full min-w-[800px] border-collapse">
+                        <table className="w-full min-w-[1000px] border-collapse">
                             <thead>
+                                {/* แถวเดือน */}
                                 <tr>
-                                    <th className="w-64 p-3 border-b border-r bg-gray-50 text-left text-xs font-bold text-gray-500 uppercase">PHASE / ACTIVITY</th>
+                                    <th rowSpan={2} className="w-64 p-3 border-b border-r bg-gray-50 text-left text-xs font-bold text-gray-500 uppercase sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                                        PHASE / ACTIVITY
+                                    </th>
                                     {timelineMonths.map((date, index) => (
-                                        <th key={index} className="w-24 border-b border-r bg-gray-100 text-center text-xs font-bold text-gray-600 py-2">
-                                            {date.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}
+                                        <th key={index} colSpan={4} className="border-b border-r bg-gray-100 text-center text-xs font-bold text-gray-600 py-1">
+                                            {date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }).toUpperCase()}
                                         </th>
+                                    ))}
+                                </tr>
+                                {/* แถวสัปดาห์ (4 สัปดาห์ต่อเดือน) */}
+                                <tr>
+                                    {timelineMonths.map((_, mIndex) => (
+                                        [1, 2, 3, 4].map((weekNum) => (
+                                            <th key={`${mIndex}-${weekNum}`} className="w-8 border-b border-r border-gray-200 bg-gray-50 text-[10px] text-center text-gray-400 py-1 font-normal">
+                                                W{weekNum}
+                                            </th>
+                                        ))
                                     ))}
                                 </tr>
                             </thead>
                             <tbody className="text-sm">
-                                {/* แถวของ Features ที่ดึงจาก DB */}
                                 {features.length === 0 ? (
                                     <tr>
-                                        <td colSpan={timelineMonths.length + 1} className="p-8 text-center text-gray-400 italic">
-                                            ยังไม่มีแผนงาน (กดปุ่ม + Add Activity ด้านบนเพื่อเริ่มวางแผน)
+                                        <td colSpan={(timelineMonths.length * 4) + 1} className="p-8 text-center text-gray-400 italic">
+                                            ยังไม่มีข้อมูลแผนงาน
                                         </td>
                                     </tr>
                                 ) : (
                                     features.map((feat, i) => (
-                                        <tr key={feat.id}>
-                                            <td className="p-4 border-r border-t font-medium text-gray-700 bg-white relative">
-                                                <div className="font-bold text-blue-900">{i + 1}. {feat.title}</div>
-                                                <div className="text-xs text-gray-400 font-normal truncate max-w-[200px]">{feat.detail}</div>
-                                                <div className="text-[10px] text-gray-400 mt-1">
+                                        <tr key={feat.id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="p-3 border-r border-t bg-white sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                                                <div className="font-bold text-gray-800 text-xs">{i + 1}. {feat.title}</div>
+                                                <div className="text-[10px] text-gray-400 mt-0.5">
                                                     {formatDate(feat.start_date)} - {formatDate(feat.due_date)}
                                                 </div>
                                             </td>
-                                            {timelineMonths.map((date, index) => {
-                                                const active = isFeatureActiveInMonth(feat, date);
-                                                return (
-                                                    <td key={index} className="border-r border-t p-0 h-16 relative">
-                                                        <div className="absolute inset-0 border-r border-dashed border-gray-100 pointer-events-none"></div>
-                                                        {active && (
-                                                            <div 
-                                                                className={`absolute top-1/2 left-0 right-0 h-5 mx-1 rounded shadow-sm flex items-center justify-center -translate-y-1/2 text-[10px] text-white font-bold
-                                                                ${feat.status === 'COMPLETED' ? 'bg-green-500' : 
-                                                                  feat.status === 'IN_PROGRESS' ? 'bg-blue-500' : 'bg-yellow-500'}`}
-                                                            >
-                                                                {feat.status === 'COMPLETED' ? 'Done' : ''}
-                                                            </div>
-                                                        )}
-                                                    </td>
-                                                );
-                                            })}
+                                            {timelineMonths.map((date, mIndex) => (
+                                                [0, 1, 2, 3].map((wIndex) => {
+                                                    const active = isFeatureActiveInWeek(feat, date, wIndex);
+                                                    const isEndOfWeek4 = wIndex === 3; // เพื่อตีเส้นกั้นเดือนให้หนาหน่อย
+                                                    return (
+                                                        <td 
+                                                            key={`${mIndex}-${wIndex}`} 
+                                                            className={`border-t p-0 h-10 relative ${isEndOfWeek4 ? 'border-r-2 border-r-gray-200' : 'border-r border-r-gray-100'}`}
+                                                        >
+                                                            {active && (
+                                                                <div 
+                                                                    className={`absolute top-1.5 bottom-1.5 left-0 right-0 mx-px rounded-sm shadow-sm
+                                                                    ${feat.status === 'COMPLETED' ? 'bg-green-500' : 
+                                                                      feat.status === 'IN_PROGRESS' ? 'bg-blue-500' : 'bg-yellow-400'}`}
+                                                                    title={`${feat.status}: ${feat.title}`}
+                                                                ></div>
+                                                            )}
+                                                        </td>
+                                                    );
+                                                })
+                                            ))}
                                         </tr>
                                     ))
                                 )}
@@ -208,30 +299,39 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
                     </div>
                 </div>
 
-                {/* --- 🟢 ส่วนที่ 2: Detail Table (Features List) --- */}
+                {/* --- 🟢 ส่วนที่ 2: Detail Table (Editable) --- */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                     <div className="p-5 border-b flex items-center justify-between">
-                        <h2 className="font-bold text-gray-800">Plan Details Table</h2>
+                        <h2 className="font-bold text-gray-800">รายละเอียดแผนงาน (Plan Details)</h2>
                     </div>
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
                             <thead>
-                                <tr className="bg-gray-800 text-white text-xs uppercase tracking-wider">
-                                    <th className="p-4 font-medium w-32">Date Created</th>
+                                <tr className="bg-slate-800 text-white text-xs uppercase tracking-wider">
+                                    <th className="p-4 font-medium w-20 text-center">Action</th>
                                     <th className="p-4 font-medium w-40">Title / Feature</th>
                                     <th className="p-4 font-medium min-w-[200px]">Detail</th>
                                     <th className="p-4 font-medium min-w-[150px]">Next List</th>
                                     <th className="p-4 font-medium w-28 text-center">Status</th>
-                                    <th className="p-4 font-medium w-28 text-center">Due Date</th>
+                                    <th className="p-4 font-medium w-32 text-center">Duration</th>
                                     <th className="p-4 font-medium w-32">Remark</th>
-                                    <th className="p-4 font-medium w-32">Note (By)</th>
+                                    <th className="p-4 font-medium w-32">Note By</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 text-sm">
                                 {features.map((feat) => (
                                     <tr key={feat.id} className="hover:bg-blue-50 transition-colors">
-                                        <td className="p-4 text-gray-500">{formatDate(feat.start_date)}</td>
-                                        <td className="p-4 font-bold text-blue-900">{feat.title}</td>
+                                        <td className="p-4 text-center">
+                                            <div className="flex items-center justify-center gap-2">
+                                                <button onClick={() => openEditModal(feat)} className="p-1.5 bg-white border rounded hover:bg-blue-50 text-blue-600 transition-colors">
+                                                    <Edit2 size={14} />
+                                                </button>
+                                                <button onClick={() => handleDelete(feat.id)} className="p-1.5 bg-white border rounded hover:bg-red-50 text-red-600 transition-colors">
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                        <td className="p-4 font-bold text-slate-800">{feat.title}</td>
                                         <td className="p-4 text-gray-600">{feat.detail || '-'}</td>
                                         <td className="p-4 text-gray-600">{feat.next_list || '-'}</td>
                                         <td className="p-4 text-center">
@@ -243,7 +343,9 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
                                                 {feat.status}
                                             </span>
                                         </td>
-                                        <td className="p-4 text-center text-red-600 font-medium">{formatDate(feat.due_date)}</td>
+                                        <td className="p-4 text-center text-xs text-gray-500">
+                                            {formatDate(feat.start_date)} <br/> ↓ <br/> {formatDate(feat.due_date)}
+                                        </td>
                                         <td className="p-4 text-gray-500">{feat.remark || '-'}</td>
                                         <td className="p-4 flex items-center gap-2">
                                             <User size={14} className="text-gray-400" /> {feat.note_by}
@@ -256,50 +358,53 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
                 </div>
             </div>
 
-            {/* --- 🟢 Modal: Add Feature --- */}
+            {/* --- 🟢 Modal: Add/Edit Feature --- */}
             {isModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden animate-fade-in">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
                         <div className="p-4 border-b flex justify-between items-center bg-gray-50">
-                            <h3 className="font-bold text-gray-800">เพิ่มแผนงาน / Feature ใหม่</h3>
-                            <button onClick={() => setIsModalOpen(false)} className="p-1 hover:bg-gray-200 rounded-full"><X size={20} /></button>
+                            <h3 className="font-bold text-gray-800 flex items-center gap-2">
+                                {editingId ? <Edit2 size={18} /> : <Plus size={18} />}
+                                {editingId ? 'แก้ไขแผนงาน' : 'เพิ่มแผนงานใหม่'}
+                            </h3>
+                            <button onClick={() => setIsModalOpen(false)} className="p-1 hover:bg-gray-200 rounded-full text-gray-500"><X size={20} /></button>
                         </div>
-                        <form onSubmit={handleCreateFeature} className="p-6 space-y-4">
+                        <form onSubmit={handleSave} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Title / Feature Name <span className="text-red-500">*</span></label>
-                                <input type="text" required className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-blue-500 outline-none" 
-                                    value={newFeature.title} onChange={e => setNewFeature({...newFeature, title: e.target.value})} placeholder="เช่น ออกแบบ UX/UI, ติดตั้ง Server" />
+                                <input type="text" required className="w-full border rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
+                                    value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="ระบุชื่องาน..." />
                             </div>
                             
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Start Date <span className="text-red-500">*</span></label>
-                                    <input type="date" required className="w-full border rounded-lg p-2 outline-none"
-                                        value={newFeature.start_date} onChange={e => setNewFeature({...newFeature, start_date: e.target.value})} />
+                                    <input type="date" required className="w-full border rounded-lg p-2.5 outline-none"
+                                        value={formData.start_date} onChange={e => setFormData({...formData, start_date: e.target.value})} />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Due Date <span className="text-red-500">*</span></label>
-                                    <input type="date" required className="w-full border rounded-lg p-2 outline-none"
-                                        value={newFeature.due_date} onChange={e => setNewFeature({...newFeature, due_date: e.target.value})} />
+                                    <input type="date" required className="w-full border rounded-lg p-2.5 outline-none"
+                                        value={formData.due_date} onChange={e => setFormData({...formData, due_date: e.target.value})} />
                                 </div>
                             </div>
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Detail</label>
-                                <textarea className="w-full border rounded-lg p-2 outline-none" rows={2}
-                                    value={newFeature.detail} onChange={e => setNewFeature({...newFeature, detail: e.target.value})} placeholder="รายละเอียดงาน..." />
+                                <textarea className="w-full border rounded-lg p-2.5 outline-none" rows={3}
+                                    value={formData.detail} onChange={e => setFormData({...formData, detail: e.target.value})} placeholder="รายละเอียดงาน..." />
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Next List (สิ่งที่ต้องทำต่อ)</label>
-                                    <input type="text" className="w-full border rounded-lg p-2 outline-none"
-                                        value={newFeature.next_list} onChange={e => setNewFeature({...newFeature, next_list: e.target.value})} />
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Next List (งานถัดไป)</label>
+                                    <input type="text" className="w-full border rounded-lg p-2.5 outline-none"
+                                        value={formData.next_list} onChange={e => setFormData({...formData, next_list: e.target.value})} />
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                                    <select className="w-full border rounded-lg p-2 outline-none bg-white"
-                                        value={newFeature.status} onChange={e => setNewFeature({...newFeature, status: e.target.value})}>
+                                    <select className="w-full border rounded-lg p-2.5 outline-none bg-white"
+                                        value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
                                         <option value="PENDING">PENDING</option>
                                         <option value="IN_PROGRESS">IN PROGRESS</option>
                                         <option value="COMPLETED">COMPLETED</option>
@@ -309,14 +414,14 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Remark</label>
-                                <input type="text" className="w-full border rounded-lg p-2 outline-none"
-                                    value={newFeature.remark} onChange={e => setNewFeature({...newFeature, remark: e.target.value})} placeholder="หมายเหตุ..." />
+                                <input type="text" className="w-full border rounded-lg p-2.5 outline-none"
+                                    value={formData.remark} onChange={e => setFormData({...formData, remark: e.target.value})} placeholder="หมายเหตุ..." />
                             </div>
 
-                            <div className="pt-4 flex justify-end gap-2">
-                                <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">ยกเลิก</button>
-                                <button type="submit" className="px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 flex items-center gap-2">
-                                    <Save size={18} /> บันทึก
+                            <div className="pt-4 flex justify-end gap-2 border-t mt-4">
+                                <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors font-medium">ยกเลิก</button>
+                                <button type="submit" className="px-5 py-2.5 text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition-colors flex items-center gap-2 font-medium shadow-lg shadow-blue-200">
+                                    <Save size={18} /> {editingId ? 'บันทึกการแก้ไข' : 'บันทึกข้อมูล'}
                                 </button>
                             </div>
                         </form>

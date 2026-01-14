@@ -294,6 +294,36 @@ app.post('/api/projects/:id/features', authenticateToken, (req, res) => {
         res.json({ message: 'Feature added successfully', id: result.insertId });
     });
 });
+// --- Project Features Routes (เพิ่มเติม) ---
+
+// 3. แก้ไข Feature (Update)
+app.put('/api/features/:id', authenticateToken, (req, res) => {
+    const featureId = req.params.id;
+    const { title, detail, next_list, status, start_date, due_date, remark } = req.body;
+    const note_by = req.user.username; // อัปเดตชื่อคนแก้ไขล่าสุด
+
+    const sql = `
+        UPDATE project_features 
+        SET title=?, detail=?, next_list=?, status=?, start_date=?, due_date=?, remark=?, note_by=?
+        WHERE id=?
+    `;
+    
+    db.query(sql, [title, detail, next_list, status, start_date, due_date, remark, note_by, featureId], (err, result) => {
+        if (err) return res.status(500).json(err);
+        res.json({ message: 'Feature updated successfully' });
+    });
+});
+
+// 4. ลบ Feature (Delete)
+app.delete('/api/features/:id', authenticateToken, (req, res) => {
+    const featureId = req.params.id;
+    const sql = 'DELETE FROM project_features WHERE id=?';
+
+    db.query(sql, [featureId], (err, result) => {
+        if (err) return res.status(500).json(err);
+        res.json({ message: 'Feature deleted successfully' });
+    });
+});
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });
