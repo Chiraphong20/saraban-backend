@@ -11,7 +11,7 @@ const Login: React.FC = () => {
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            const res = await axios.post('https://saraban-api.onrender.com/api/login', { username, password });
+            const res = await axios.post('https://saraban-backend.onrender.com/api/login', { username, password });
             login(res.data.token, res.data.user);
         } catch (err) {
             setError('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
@@ -20,7 +20,7 @@ const Login: React.FC = () => {
 
     // ปุ่มแถม: สำหรับสร้าง User แรก (ใช้ครั้งเดียวแล้วลบออกได้)
     const handleRegisterAdmin = async () => {
-        await axios.post('https://saraban-api.onrender.com/api/register', {
+        await axios.post('https://saraban-backend.onrender.com/api/register', {
             username: 'admin',
             password: '123456',
             fullname: 'Admin Saraban'

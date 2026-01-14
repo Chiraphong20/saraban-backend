@@ -32,7 +32,7 @@ const ProjectTimelineModal: React.FC<ProjectTimelineModalProps> = ({ isOpen, onC
 
     const fetchLogs = async () => {
         try {
-            const res = await axios.get(`https://saraban-api.onrender.com/api/projects/${project.id}/logs`);
+            const res = await axios.get(`https://saraban-backend.onrender.com/api/projects/${project.id}/logs`);
             setLogs(res.data);
         } catch (error) {
             console.error('Error fetching logs:', error);
@@ -54,7 +54,7 @@ const ProjectTimelineModal: React.FC<ProjectTimelineModalProps> = ({ isOpen, onC
     const handleDeleteClick = async (logId: number) => {
         if (!window.confirm('ต้องการลบรายการนี้ใช่หรือไม่?')) return;
         try {
-            await axios.delete(`https://saraban-api.onrender.com/api/logs/${logId}`);
+            await axios.delete(`https://saraban-backend.onrender.com/api/logs/${logId}`);
             await fetchLogs();
         } catch (error) {
             alert('ลบข้อมูลไม่สำเร็จ');
@@ -68,9 +68,9 @@ const ProjectTimelineModal: React.FC<ProjectTimelineModalProps> = ({ isOpen, onC
         setIsSubmitting(true);
         try {
             if (editingLogId) {
-                await axios.put(`https://saraban-api.onrender.com/api/logs/${editingLogId}`, { details: note });
+                await axios.put(`https://saraban-backend.onrender.com/api/logs/${editingLogId}`, { details: note });
             } else {
-                await axios.post(`https://saraban-api.onrender.com/api/projects/${project.id}/logs`, {
+                await axios.post(`https://saraban-backend.onrender.com/api/projects/${project.id}/logs`, {
                     action: 'MEETING',
                     details: note
                 });
