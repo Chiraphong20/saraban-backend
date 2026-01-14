@@ -14,10 +14,10 @@ app.use(bodyParser.json());
 
 // --- 1. การเชื่อมต่อฐานข้อมูล (Database Connection) ---
 const db = mysql.createConnection({
-    host: 'boliw8r9sahjwiwa8lit-mysql.services.clever-cloud.com',
-    user: 'uknffixcn0kjzv4i',     
-    password: '4tbzzP1Ztr3j4yyTNV9i', 
-    database: 'boliw8r9sahjwiwa8lit', 
+    host: 'bcxqbc79bllal1dqsids-mysql.services.clever-cloud.com',
+    user: 'ugkck79inxfxkjrf',     
+    password: 'ckEDWQRFzCx1tCLmv9Gn', 
+    database: 'bcxqbc79bllal1dqsids', 
     port: 3306,
     enableKeepAlive: true,
     keepAliveInitialDelay: 0
