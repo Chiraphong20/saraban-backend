@@ -369,6 +369,75 @@ app.put('/api/notes/:id', authenticateToken, (req, res) => {
         res.json({ message: 'Note updated successfully', content });
     });
 });
+// --- Project Features (Timeline) Routes ---
+
+// 1. ดึงข้อมูล Timeline ของโครงการ
+app.get('/api/projects/:id/features', authenticateToken, (req, res) => {
+    const projectId = req.params.id;
+    const sql = 'SELECT * FROM project_features WHERE project_id = ? ORDER BY start_date ASC';
+    db.query(sql, [projectId], (err, results) => {
+        if (err) return res.status(500).json(err);
+        res.json(results);
+    });
+});
+
+// 2. เพิ่มรายการเข้า Timeline (ใช้ทั้งตอนย้าย Note และเพิ่มเอง)
+app.post('/api/projects/:id/features', authenticateToken, (req, res) => {
+    const projectId = req.params.id;
+    const { title, status, start_date, due_date } = req.body;
+    
+    // Default values
+    const detail = req.body.detail || '';
+    const remark = req.body.remark || '';
+    
+    const sql = `
+        INSERT INTO project_features 
+        (project_id, title, detail, status, start_date, due_date, remark) 
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    `;
+    
+    db.query(sql, [projectId, title, detail, status, start_date, due_date, remark], (err, result) => {
+        if (err) return res.status(500).json(err);
+        
+        // Log การกระทำ
+        const logSql = 'INSERT INTO audit_logs (user_id, action, details, project_id) VALUES (?, ?, ?, ?)';
+        db.query(logSql, [req.user.id, 'CREATE', `เพิ่มแผนงาน: ${title}`, projectId]);
+
+        res.json({ id: result.insertId, ...req.body });
+    });
+});
+
+// 3. ลบรายการจาก Timeline
+app.delete('/api/features/:id', authenticateToken, (req, res) => {
+    const featureId = req.params.id;
+    const sql = 'DELETE FROM project_features WHERE id = ?';
+    db.query(sql, [featureId], (err, result) => {
+        if (err) return res.status(500).json(err);
+        res.json({ message: 'Deleted successfully' });
+    });
+});
+// --- Feature Notes Routes ---
+
+// 1. ดึง Notes ทั้งหมดของ Feature หนึ่งๆ
+app.get('/api/features/:id/notes', authenticateToken, (req, res) => {
+    db.query('SELECT * FROM feature_notes WHERE feature_id = ? ORDER BY created_at DESC', [req.params.id], (err, results) => {
+        if (err) return res.status(500).json(err);
+        res.json(results);
+    });
+});
+
+// 2. เพิ่ม Note ให้ Feature (ใช้ทั้งหน้า Timeline และย้ายจาก Dashboard)
+app.post('/api/features/:id/notes', authenticateToken, (req, res) => {
+    const featureId = req.params.id;
+    const { content } = req.body;
+    const user = req.user.username;
+
+    db.query('INSERT INTO feature_notes (feature_id, content, created_by) VALUES (?, ?, ?)', 
+    [featureId, content, user], (err, result) => {
+        if (err) return res.status(500).json(err);
+        res.json({ id: result.insertId, content, created_by: user, created_at: new Date() });
+    });
+});
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });
