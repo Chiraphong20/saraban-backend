@@ -1,6 +1,8 @@
 import React, { ReactNode } from 'react';
 import { LayoutDashboard, FolderKanban, FileClock, Menu, X, Bell, LogOut } from 'lucide-react';
-import { useAuth } from '../context/AuthContext'; // ✅ 1. Import useAuth
+import { useAuth } from '../context/AuthContext';
+// ✅ 1. Import Context
+import { useNotifications } from '../context/NotificationContext';
 
 interface LayoutProps {
     children: ReactNode;
@@ -10,7 +12,10 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate }) => {
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
-    const { user, logout } = useAuth(); // ✅ 2. ดึงข้อมูล user และฟังก์ชัน logout มาใช้
+    const { user, logout } = useAuth();
+    
+    // ✅ 2. ดึง unreadCount มาใช้
+    const { unreadCount } = useNotifications();
 
     const menuItems = [
         { id: 'dashboard', label: 'ภาพรวมระบบ', icon: LayoutDashboard },
@@ -20,8 +25,9 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate }) =>
 
     return (
         <div className="flex h-screen bg-gray-50 overflow-hidden">
-            {/* Mobile Sidebar Overlay */}
-            {isSidebarOpen && (
+            {/* ... (Code ส่วน Sidebar เหมือนเดิม ไม่ต้องแก้) ... */}
+             {/* Mobile Sidebar Overlay */}
+             {isSidebarOpen && (
                 <div 
                     className="fixed inset-0 z-20 bg-black bg-opacity-50 lg:hidden"
                     onClick={() => setIsSidebarOpen(false)}
@@ -73,7 +79,6 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate }) =>
                     })}
                 </nav>
 
-                {/* ✅ 3. ส่วน User Profile และปุ่ม Logout */}
                 <div className="absolute bottom-0 w-full p-4 bg-slate-900 border-t border-slate-800">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center min-w-0">
@@ -92,7 +97,6 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate }) =>
                             </div>
                         </div>
                         
-                        {/* ปุ่ม Logout */}
                         <button 
                             onClick={logout}
                             className="p-2 text-gray-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors ml-2"
@@ -106,7 +110,6 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate }) =>
 
             {/* Main Content */}
             <div className="flex flex-col flex-1 w-0 overflow-hidden">
-                {/* Header */}
                 <header className="flex items-center justify-between h-16 px-6 bg-white border-b border-gray-200 shadow-sm">
                     <button 
                         onClick={() => setIsSidebarOpen(true)}
@@ -116,9 +119,20 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate }) =>
                     </button>
                     
                     <div className="flex items-center ml-auto space-x-4">
-                        <button className="relative p-2 text-gray-400 transition-colors rounded-full hover:bg-gray-100 hover:text-gray-600">
+                        <button 
+                            onClick={() => onNavigate('notifications')}
+                            className={`relative p-2 transition-colors rounded-full hover:bg-gray-100 hover:text-gray-600 ${
+                                currentPage === 'notifications' ? 'text-blue-600 bg-blue-50' : 'text-gray-400'
+                            }`}
+                        >
                             <Bell size={20} />
-                            <span className="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full"></span>
+                            {/* ✅ 3. แสดงจุดแดงเมื่อมี unreadCount > 0 เท่านั้น */}
+                            {unreadCount > 0 && currentPage !== 'notifications' && (
+                                <span className="absolute top-2 right-2 flex h-2.5 w-2.5">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+                                </span>
+                            )}
                         </button>
                     </div>
                 </header>
