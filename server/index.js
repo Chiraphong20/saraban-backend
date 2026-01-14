@@ -12,7 +12,7 @@ const SECRET_KEY = process.env.SECRET_KEY || 'MySuperSecretKey2024';
 app.use(cors());
 app.use(bodyParser.json());
 
-// --- Database Connection ---
+// --- 1. การเชื่อมต่อฐานข้อมูล (Database Connection) ---
 const db = mysql.createConnection({
     host: 'boliw8r9sahjwiwa8lit-mysql.services.clever-cloud.com',
     user: 'uknffixcn0kjzv4i',     
@@ -24,11 +24,14 @@ const db = mysql.createConnection({
 });
 
 db.connect(err => {
-    if (err) console.error('❌ Database connection failed:', err);
-    else console.log('✅ Connected to MySQL Database');
+    if (err) {
+        console.error('❌ Database connection failed:', err);
+    } else {
+        console.log('✅ Connected to MySQL Database (Clever Cloud)');
+    }
 });
 
-// --- Middleware ---
+// --- Middleware: ตรวจสอบ Token และดึงข้อมูล User ---
 const authenticateToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
@@ -36,14 +39,14 @@ const authenticateToken = (req, res, next) => {
 
     jwt.verify(token, SECRET_KEY, (err, user) => {
         if (err) return res.sendStatus(403);
-        req.user = user;
+        req.user = user; // ใน user จะมี { id, username, fullname, role }
         next();
     });
 };
 
-// --- Helper: Logs ---
+// --- Helper: ฟังก์ชันบันทึก Log (ใช้ภายในไฟล์นี้) ---
 const logAction = (entityId, action, actor, details) => {
-    const sql = 'INSERT INTO audit_logs (entity_id, action, actor, details) VALUES (?, ?, ?, ?)';
+    const sql = 'INSERT INTO audit_logs (entity_id, action, actor, details, timestamp) VALUES (?, ?, ?, ?, NOW())';
     db.query(sql, [entityId, action, actor, details], (err) => {
         if (err) console.error("Log Error:", err);
     });
@@ -51,82 +54,127 @@ const logAction = (entityId, action, actor, details) => {
 
 // ================= ROUTES =================
 
-// Auth
+// 1. Login
 app.post('/api/login', (req, res) => {
     const { username, password } = req.body;
-    db.query('SELECT * FROM users WHERE username = ?', [username], (err, results) => {
+    const sql = 'SELECT * FROM users WHERE username = ?';
+    
+    db.query(sql, [username], (err, results) => {
         if (err) return res.status(500).json({ error: err.message });
-        if (results.length === 0 || password !== results[0].password) {
-            return res.status(401).json({ message: 'Invalid credentials' });
-        }
+        if (results.length === 0) return res.status(401).json({ message: 'User not found' });
+
         const user = results[0];
-        const token = jwt.sign({ id: user.id, username: user.username, fullname: user.fullname, role: user.role }, SECRET_KEY, { expiresIn: '12h' });
+        // เช็ค Password (Plain text)
+        if (password !== user.password) {
+            return res.status(401).json({ message: 'Invalid password' });
+        }
+
+        const token = jwt.sign(
+            { id: user.id, username: user.username, fullname: user.fullname, role: user.role }, 
+            SECRET_KEY, 
+            { expiresIn: '12h' }
+        );
         res.json({ token, user });
     });
 });
 
+// 2. Register
 app.post('/api/register', (req, res) => {
     const { username, password, fullname, role } = req.body;
-    db.query('INSERT INTO users (username, password, fullname, role) VALUES (?, ?, ?, ?)', 
-    [username, password, fullname, role || 'user'], (err) => {
+    const userRole = role || 'user'; 
+    const sql = 'INSERT INTO users (username, password, fullname, role) VALUES (?, ?, ?, ?)';
+    db.query(sql, [username, password, fullname, userRole], (err, result) => {
         if (err) return res.status(500).json(err);
-        res.json({ message: 'Registered' });
+        res.json({ message: 'User registered successfully' });
     });
 });
 
-// --- Projects ---
+// --- Project Routes ---
 
+// Get All Projects
 app.get('/api/projects', authenticateToken, (req, res) => {
-    db.query('SELECT * FROM projects ORDER BY created_at DESC', (err, results) => {
+    const sql = 'SELECT * FROM projects ORDER BY created_at DESC';
+    db.query(sql, (err, results) => {
         if (err) return res.status(500).json(err);
         res.json(results);
     });
 });
 
+// Create Project
 app.post('/api/projects', authenticateToken, (req, res) => {
     const { code, name, description, owner, budget, status, startDate, endDate } = req.body;
-    // แปลงค่าว่าง
+    
+    // แปลงค่าว่างเป็น NULL หรือ 0
     const sDate = startDate === "" ? null : startDate;
     const eDate = endDate === "" ? null : endDate;
     const budg = (budget === "" || budget === null) ? 0 : budget;
 
     const sql = 'INSERT INTO projects (code, name, description, owner, budget, status, startDate, endDate) VALUES (?, ?, ?, ?, ?, ?, ?, ?)';
+    
     db.query(sql, [code, name, description, owner, budg, status, sDate, eDate], (err, result) => {
         if (err) return res.status(500).json(err);
+        
         const newId = result.insertId;
-        logAction(newId, 'CREATE', req.user.fullname, `สร้างโครงการ: ${name}`);
-        res.json({ id: newId, ...req.body });
+        // บันทึก Log สร้าง
+        logAction(newId, 'CREATE', req.user.fullname, `สร้างโครงการ: ${name} (${code})`);
+        
+        res.json({ id: newId, ...req.body, updated_at: new Date() });
     });
 });
 
+// Update Project
 app.put('/api/projects/:id', authenticateToken, (req, res) => {
     const { id } = req.params;
     const { code, name, description, owner, budget, status, startDate, endDate } = req.body;
-    
+
     const sDate = startDate === "" ? null : startDate;
     const eDate = endDate === "" ? null : endDate;
     const budg = (budget === "" || budget === null) ? 0 : budget;
 
     const sql = 'UPDATE projects SET code=?, name=?, description=?, owner=?, budget=?, status=?, startDate=?, endDate=? WHERE id=?';
+    
     db.query(sql, [code, name, description, owner, budg, status, sDate, eDate, id], (err) => {
         if (err) return res.status(500).json(err);
-        // บันทึก Log ว่ามีการแก้ไข
-        logAction(id, 'UPDATE', req.user.fullname, `แก้ไขสถานะ/ข้อมูล: ${status}`);
-        res.json({ message: 'Updated' });
+        
+        // บันทึก Log แก้ไข
+        logAction(id, 'UPDATE', req.user.fullname, `แก้ไขข้อมูลโครงการ: ${name} (สถานะ: ${status})`);
+        
+        res.json({ message: 'Updated successfully' });
     });
 });
 
+// 🔥 Delete Project (แบบพิเศษ: บันทึก Log ก่อนลบ)
 app.delete('/api/projects/:id', authenticateToken, (req, res) => {
-    const { id } = req.params;
-    db.query('DELETE FROM projects WHERE id = ?', [id], (err) => {
-        if (err) return res.status(500).json(err);
-        res.json({ message: 'Deleted' });
+    const projectId = req.params.id;
+    const actor = req.user.fullname || req.user.username || 'Unknown';
+
+    // 1. ดึงข้อมูลโครงการก่อนลบ เพื่อเอาชื่อมาเก็บ Log
+    const getProjectSql = 'SELECT code, name FROM projects WHERE id = ?';
+    db.query(getProjectSql, [projectId], (err, results) => {
+        if (err) return res.status(500).json({ error: 'Database error' });
+        if (results.length === 0) return res.status(404).json({ error: 'Project not found' });
+
+        const project = results[0];
+        const logDetail = `ลบโครงการ: ${project.code} - ${project.name}`;
+
+        // 2. บันทึก Log การลบ (ใส่ entity_id เป็น ID เดิมที่ถูกลบไปแล้ว)
+        const logSql = 'INSERT INTO audit_logs (entity_id, action, actor, details, timestamp) VALUES (?, ?, ?, ?, NOW())';
+        db.query(logSql, [projectId, 'DELETE', actor, logDetail], (logErr) => {
+            if (logErr) console.error('Failed to log deletion:', logErr);
+
+            // 3. ลบโครงการจริง
+            const deleteSql = 'DELETE FROM projects WHERE id = ?';
+            db.query(deleteSql, [projectId], (delErr) => {
+                if (delErr) return res.status(500).json(delErr);
+                res.json({ message: 'Deleted and logged successfully' });
+            });
+        });
     });
 });
 
-// --- 🔥 ส่วนที่เพิ่มใหม่สำหรับ Timeline (แก้ปัญหาเพิ่ม Note ไม่ได้) ---
+// --- Timeline & Logs Routes ---
 
-// 1. ดึง Log ของโปรเจกต์เดียว (ใช้ใน Modal Timeline)
+// 1. ดึง Log ของโปรเจกต์รายตัว (Timeline)
 app.get('/api/projects/:id/logs', authenticateToken, (req, res) => {
     const { id } = req.params;
     const sql = 'SELECT * FROM audit_logs WHERE entity_id = ? ORDER BY timestamp DESC';
@@ -136,45 +184,39 @@ app.get('/api/projects/:id/logs', authenticateToken, (req, res) => {
     });
 });
 
-// 2. เพิ่ม Comment/Note ลงใน Timeline
+// 2. เพิ่ม Note ลงใน Timeline
 app.post('/api/projects/:id/logs', authenticateToken, (req, res) => {
     const { id } = req.params;
-    const { note, action } = req.body; // รับค่า note จากหน้าบ้าน
+    const { note, action } = req.body; 
     const actor = req.user.fullname;
-    
-    // action ถ้าไม่ส่งมาให้เป็น 'COMMENT'
-    const logActionType = action || 'COMMENT'; 
+    const actionType = action || 'NOTE'; // ถ้าไม่ส่ง action มา ให้เป็น NOTE
 
-    const sql = 'INSERT INTO audit_logs (entity_id, action, actor, details) VALUES (?, ?, ?, ?)';
-    db.query(sql, [id, logActionType, actor, note], (err) => {
-        if (err) return res.status(500).json(err);
-        res.json({ message: 'Log added successfully' });
-    });
+    logAction(id, actionType, actor, note);
+    res.json({ message: 'Log added successfully' });
 });
 
-// 3. แก้ไข Log (ถ้ามีฟีเจอร์นี้)
-app.put('/api/logs/:logId', authenticateToken, (req, res) => {
-    const { logId } = req.params;
-    const { note } = req.body;
-    db.query('UPDATE audit_logs SET details = ? WHERE id = ?', [note, logId], (err) => {
-        if (err) return res.status(500).json(err);
-        res.json({ message: 'Log updated' });
-    });
-});
-
-// 4. ลบ Log
-app.delete('/api/logs/:logId', authenticateToken, (req, res) => {
-    const { logId } = req.params;
-    db.query('DELETE FROM audit_logs WHERE id = ?', [logId], (err) => {
-        if (err) return res.status(500).json(err);
-        res.json({ message: 'Log deleted' });
-    });
-});
-// 🔥 เพิ่ม Route นี้เข้าไปครับ (สำหรับดึง Log รวมทั้งหมด)
+// 3. ดึง Log ทั้งหมด (สำหรับหน้า AuditLogViewer)
 app.get('/api/audit-logs', authenticateToken, (req, res) => {
-    const sql = 'SELECT * FROM audit_logs ORDER BY timestamp DESC';
+    // ดึง Log ทั้งหมดเรียงตามเวลาล่าสุด
+    const sql = 'SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 1000'; 
     db.query(sql, (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
+        if (err) return res.status(500).json(err);
+        res.json(results);
+    });
+});
+// --- Notification Route ---
+// ดึง 20 กิจกรรมล่าสุดเพื่อแสดงเป็น Notification
+app.get('/api/notifications', authenticateToken, (req, res) => {
+    // เลือกข้อมูลที่จำเป็น และ Join เพื่อเอารหัสโครงการมาแสดง (ถ้ามี)
+    const sql = `
+        SELECT audit_logs.*, projects.code as project_code 
+        FROM audit_logs 
+        LEFT JOIN projects ON audit_logs.entity_id = projects.id 
+        ORDER BY audit_logs.timestamp DESC 
+        LIMIT 20
+    `;
+    db.query(sql, (err, results) => {
+        if (err) return res.status(500).json(err);
         res.json(results);
     });
 });

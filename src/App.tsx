@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 // Import Contexts
 import { ProjectProvider } from './context/ProjectContext';
-import { AuthProvider, useAuth } from './context/AuthContext'; // ⚠️ ต้องสร้างไฟล์นี้ก่อน (ตามขั้นตอนที่แล้ว)
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { NotificationProvider } from './context/NotificationContext'; // ✅ เพิ่ม NotificationProvider
 
 // Import Components
 import Layout from './components/Layout';
@@ -9,6 +10,7 @@ import Dashboard from './components/Dashboard';
 import ProjectList from './components/ProjectList';
 import AuditLogViewer from './components/AuditLogViewer';
 import Login from './components/Login';
+
 // Component ย่อย: สำหรับเช็คสถานะ Login และเลือกหน้าที่จะแสดง
 const AppContent: React.FC = () => {
   const { user } = useAuth(); // ดึงข้อมูล User จาก AuthContext
@@ -30,15 +32,23 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <ProjectProvider>
-      <Layout currentPage={currentPage} onNavigate={setCurrentPage}>
-        {renderPage()}
-      </Layout>
-    </ProjectProvider>
+    /* ✅ ลำดับการซ้อน Provider สำคัญมาก:
+       1. AuthProvider (อยู่นอกสุดใน App) -> ให้ Token
+       2. NotificationProvider -> ใช้ Token ดึงแจ้งเตือน
+       3. ProjectProvider -> ใช้ Token ดึงโปรเจกต์
+       4. Layout -> มีปุ่มกระดิ่งและเนื้อหา
+    */
+    <NotificationProvider>
+      <ProjectProvider>
+        <Layout currentPage={currentPage} onNavigate={setCurrentPage}>
+          {renderPage()}
+        </Layout>
+      </ProjectProvider>
+    </NotificationProvider>
   );
 };
 
-// Component หลัก: ครอบทุกอย่างด้วย AuthProvider
+// Component หลัก: ครอบทุกอย่างด้วย AuthProvider เป็นชั้นแรกสุด
 const App: React.FC = () => {
   return (
     <AuthProvider>
