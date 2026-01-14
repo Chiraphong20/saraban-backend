@@ -261,6 +261,39 @@ app.put('/api/change-password', authenticateToken, (req, res) => {
         });
     });
 });
+// --- Project Features / Plan Routes ---
+
+// 1. ดึง Features ของโปรเจกต์ (เพื่อไปวาด Timeline)
+app.get('/api/projects/:id/features', authenticateToken, (req, res) => {
+    const projectId = req.params.id;
+    const sql = 'SELECT * FROM project_features WHERE project_id = ? ORDER BY start_date ASC';
+    db.query(sql, [projectId], (err, results) => {
+        if (err) return res.status(500).json(err);
+        res.json(results);
+    });
+});
+
+// 2. เพิ่ม Feature ใหม่ (Plan งาน)
+app.post('/api/projects/:id/features', authenticateToken, (req, res) => {
+    const projectId = req.params.id;
+    const { title, detail, next_list, status, start_date, due_date, remark } = req.body;
+    const note_by = req.user.username; // ดึงชื่อคน login มาใส่
+
+    const sql = `
+        INSERT INTO project_features 
+        (project_id, title, detail, next_list, status, start_date, due_date, remark, note_by) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+    
+    db.query(sql, [projectId, title, detail, next_list, status, start_date, due_date, remark, note_by], (err, result) => {
+        if (err) return res.status(500).json(err);
+        
+        // (Option) บันทึก Log ว่ามีการเพิ่มแผนงาน
+        logAction(projectId, 'PLAN', req.user.username, `เพิ่มแผนงาน: ${title}`);
+        
+        res.json({ message: 'Feature added successfully', id: result.insertId });
+    });
+});
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });
