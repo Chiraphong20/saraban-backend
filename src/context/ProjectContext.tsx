@@ -21,7 +21,7 @@ export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children })
     const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
     const [isLoading, setIsLoading] = useState(false); // เปลี่ยนเป็น false เริ่มต้น
 
-    const API_URL = 'http://localhost:3001/api';
+    const API_URL = 'https://saraban-api.onrender.com/api';
 
     const fetchData = async () => {
         setIsLoading(true);
