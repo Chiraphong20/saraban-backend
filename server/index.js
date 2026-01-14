@@ -28,10 +28,8 @@ const db = mysql.createConnection({
     enableKeepAlive: true,
     keepAliveInitialDelay: 0
 });
-// ... (ต่อจาก db.connect)
-
 const initDb = () => {
-    // 1. ตาราง Users (ผู้ใช้งาน)
+    // 1. สร้างตาราง Users
     const createUsersTable = `
         CREATE TABLE IF NOT EXISTS users (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -43,7 +41,7 @@ const initDb = () => {
         )
     `;
 
-    // 2. ตาราง Projects (โครงการ) - ตรงกับตัวแปรในโค้ด index.js
+    // 2. สร้างตาราง Projects
     const createProjectsTable = `
         CREATE TABLE IF NOT EXISTS projects (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -59,7 +57,7 @@ const initDb = () => {
         )
     `;
 
-    // 3. ตาราง Audit Logs (ประวัติการใช้งาน)
+    // 3. สร้างตาราง Audit Logs
     const createAuditLogsTable = `
         CREATE TABLE IF NOT EXISTS audit_logs (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -71,10 +69,26 @@ const initDb = () => {
         )
     `;
 
-    // สั่งรันคำสั่งสร้างตารางทีละอัน
+    // รันคำสั่งสร้างตาราง
     db.query(createUsersTable, (err) => {
         if (err) console.error("❌ Error creating users table:", err);
-        else console.log("✅ Users table ready");
+        else {
+            console.log("✅ Users table ready");
+            
+            // --- เพิ่มส่วนนี้: สร้าง Admin อัตโนมัติ ---
+            const checkAdmin = "SELECT * FROM users WHERE username = 'admin'";
+            db.query(checkAdmin, (err, results) => {
+                if (!err && results.length === 0) {
+                    const insertAdmin = "INSERT INTO users (username, password, fullname, role) VALUES (?, ?, ?, ?)";
+                    // สร้าง user: admin / password: 1234
+                    db.query(insertAdmin, ['admin', '1234', 'System Admin', 'admin'], (err) => {
+                        if (err) console.error("❌ Error creating admin:", err);
+                        else console.log("✅ Default Admin created: admin / 1234");
+                    });
+                }
+            });
+            // ----------------------------------------
+        }
     });
 
     db.query(createProjectsTable, (err) => {
@@ -87,7 +101,6 @@ const initDb = () => {
         else console.log("✅ Audit Logs table ready");
     });
 };
-
 // เรียกใช้งานฟังก์ชันทันทีที่ Server เริ่มทำงาน
 initDb();
 db.connect(err => {
