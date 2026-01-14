@@ -28,7 +28,68 @@ const db = mysql.createConnection({
     enableKeepAlive: true,
     keepAliveInitialDelay: 0
 });
+// ... (ต่อจาก db.connect)
 
+const initDb = () => {
+    // 1. ตาราง Users (ผู้ใช้งาน)
+    const createUsersTable = `
+        CREATE TABLE IF NOT EXISTS users (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(255) NOT NULL UNIQUE,
+            password VARCHAR(255) NOT NULL,
+            fullname VARCHAR(255) NOT NULL,
+            role ENUM('admin', 'user') DEFAULT 'user',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `;
+
+    // 2. ตาราง Projects (โครงการ) - ตรงกับตัวแปรในโค้ด index.js
+    const createProjectsTable = `
+        CREATE TABLE IF NOT EXISTS projects (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            code VARCHAR(50) NOT NULL,
+            name VARCHAR(255) NOT NULL,
+            description TEXT,
+            owner VARCHAR(255),
+            budget DECIMAL(15, 2),
+            status ENUM('pending', 'in_progress', 'completed', 'cancelled') DEFAULT 'pending',
+            startDate DATE,
+            endDate DATE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `;
+
+    // 3. ตาราง Audit Logs (ประวัติการใช้งาน)
+    const createAuditLogsTable = `
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            entity_id INT NOT NULL,
+            action VARCHAR(50) NOT NULL,
+            actor VARCHAR(255) NOT NULL,
+            details TEXT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `;
+
+    // สั่งรันคำสั่งสร้างตารางทีละอัน
+    db.query(createUsersTable, (err) => {
+        if (err) console.error("❌ Error creating users table:", err);
+        else console.log("✅ Users table ready");
+    });
+
+    db.query(createProjectsTable, (err) => {
+        if (err) console.error("❌ Error creating projects table:", err);
+        else console.log("✅ Projects table ready");
+    });
+
+    db.query(createAuditLogsTable, (err) => {
+        if (err) console.error("❌ Error creating audit_logs table:", err);
+        else console.log("✅ Audit Logs table ready");
+    });
+};
+
+// เรียกใช้งานฟังก์ชันทันทีที่ Server เริ่มทำงาน
+initDb();
 db.connect(err => {
     if (err) {
         console.error('❌ Database connection failed:', err);
