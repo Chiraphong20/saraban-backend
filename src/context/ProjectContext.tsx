@@ -1,112 +1,173 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import axios from 'axios';
-import { Project, AuditLog } from '../types';
-import { useAuth } from './AuthContext'; // 1. นำเข้า useAuth
+import { useAuth } from './AuthContext';
+import { Project } from '../types'; // ตรวจสอบ path ให้ตรงกับไฟล์ types.ts ของคุณ
 
+// URL ของ Backend (Render)
+const API_URL = 'https://saraban-backend.onrender.com/api/projects';
+
+// Interface สำหรับ Context
 interface ProjectContextType {
     projects: Project[];
-    auditLogs: AuditLog[];
-    isLoading: boolean;
-    addProject: (project: Omit<Project, 'id'>) => Promise<void>;
+    loading: boolean;
+    error: string | null;
+    fetchProjects: () => Promise<void>;
+    addProject: (project: Omit<Project, 'id' | 'updated_at'>) => Promise<void>;
     updateProject: (id: number, updatedData: Partial<Project>) => Promise<void>;
     deleteProject: (id: number) => Promise<void>;
-    getStats: () => any;
+    getStats: () => {
+        total: number;
+        active: number;
+        completed: number;
+        totalBudget: number;
+        chartData: { name: string; value: number }[];
+    };
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);
 
 export const ProjectProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-    const { token } = useAuth(); // 2. ดึง token มาเช็ค
+    const { token } = useAuth();
     const [projects, setProjects] = useState<Project[]>([]);
-    const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-    const [isLoading, setIsLoading] = useState(false); // เปลี่ยนเป็น false เริ่มต้น
+    const [loading, setLoading] = useState<boolean>(false);
+    const [error, setError] = useState<string | null>(null);
 
-    const API_URL = 'https://saraban-backend.onrender.com/api';
+    // --- 1. Fetch Projects (ดึงข้อมูล) ---
+    const fetchProjects = useCallback(async () => {
+        if (!token) return; // ถ้าไม่มี Token ยังไม่ดึง
 
-    const fetchData = async () => {
-        setIsLoading(true);
+        setLoading(true);
         try {
-            const [projectsRes, logsRes] = await Promise.all([
-                axios.get(`${API_URL}/projects`),
-                axios.get(`${API_URL}/audit-logs`)
-            ]);
-            setProjects(projectsRes.data);
-            setAuditLogs(logsRes.data);
-        } catch (error) {
-            console.error('Error fetching data:', error);
+            // ส่ง Token ไปใน Header (แม้ AuthContext จะ set default แล้ว แต่ใส่ย้ำเพื่อความชัวร์)
+            const response = await axios.get(API_URL, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setProjects(response.data);
+            setError(null);
+        } catch (err: any) {
+            console.error("Error fetching projects:", err);
+            setError(err.response?.data?.message || 'Failed to fetch projects');
         } finally {
-            setIsLoading(false);
+            setLoading(false);
         }
-    };
+    }, [token]);
 
-    // 3. แก้ไข useEffect: ให้ทำงานเมื่อ "token" เปลี่ยนแปลงหรือมีค่าเท่านั้น
+    // ดึงข้อมูลเมื่อ component โหลด หรือ token เปลี่ยน
     useEffect(() => {
-        if (token) {
-            fetchData();
-        }
-    }, [token]); // <-- ใส่ Dependency เป็น [token]
+        fetchProjects();
+    }, [fetchProjects]);
 
-    // ... (ส่วน addProject, updateProject, deleteProject, getStats เหมือนเดิม) ...
-    // ... Copy โค้ดเดิมส่วนล่างมาใส่ได้เลย ...
-
-    const addProject = async (projectData: Omit<Project, 'id'>) => {
-         // ... code เดิม ...
-         try {
-            await axios.post(`${API_URL}/projects`, projectData);
-            await fetchData(); 
-        } catch (error) {
-            console.error(error);
-        }
-    };
-
-    const updateProject = async (id: number, updatedData: Partial<Project>) => {
-        // ... code เดิม ...
+    // --- 2. Add Project (เพิ่ม) ---
+    const addProject = async (projectData: Omit<Project, 'id' | 'updated_at'>) => {
         try {
-            await axios.put(`${API_URL}/projects/${id}`, updatedData);
-            await fetchData();
-        } catch (error) {
-            console.error(error);
+            await axios.post(API_URL, projectData, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            await fetchProjects(); // ดึงข้อมูลใหม่ทันที
+        } catch (err: any) {
+            console.error("Error adding project:", err);
+            throw err;
         }
     };
 
+    // --- 3. Update Project (แก้ไข) ---
+    const updateProject = async (id: number, updatedData: Partial<Project>) => {
+        try {
+            await axios.put(`${API_URL}/${id}`, updatedData, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            await fetchProjects(); // ดึงข้อมูลใหม่ทันที
+        } catch (err: any) {
+            console.error("Error updating project:", err);
+            throw err;
+        }
+    };
+
+    // --- 4. Delete Project (ลบ) ---
     const deleteProject = async (id: number) => {
-        // ... code เดิม ...
-         try {
-            await axios.delete(`${API_URL}/projects/${id}`);
-            await fetchData();
-        } catch (error) {
-            console.error(error);
+        if (!window.confirm("คุณแน่ใจหรือไม่ที่จะลบโครงการนี้?")) return;
+
+        try {
+            await axios.delete(`${API_URL}/${id}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            // อัปเดต State ทันทีโดยไม่ต้องรอโหลดใหม่ (Optimistic Update)
+            setProjects(prev => prev.filter(p => p.id !== id));
+        } catch (err: any) {
+            console.error("Error deleting project:", err);
+            alert("ลบไม่สำเร็จ: " + (err.response?.data?.message || err.message));
         }
     };
 
+    // --- 5. Get Stats (คำนวณสถิติสำหรับ Dashboard) ---
     const getStats = () => {
-        // ... code เดิม ...
-        // (Copy Logic getStats เดิมมาใส่ตรงนี้)
-        const total = projects.length;
-        const active = projects.filter(p => p.status === 'ACTIVE').length;
-        const completed = projects.filter(p => p.status === 'COMPLETED').length;
-        const totalBudget = projects.reduce((sum, p) => sum + Number(p.budget), 0);
-        
-        const statusDist = projects.reduce((acc, curr) => {
-            acc[curr.status] = (acc[curr.status] || 0) + 1;
-            return acc;
-        }, {} as Record<string, number>);
+        // 5.1 คำนวณงบประมาณรวม (แปลงเป็นตัวเลขป้องกัน NaN)
+        const totalBudget = projects.reduce((sum, p) => {
+            const budgetVal = Number(p.budget);
+            return sum + (isNaN(budgetVal) ? 0 : budgetVal);
+        }, 0);
 
-        const chartData = Object.keys(statusDist).map(key => ({
-            name: key,
-            value: statusDist[key]
-        }));
-        return { total, active, completed, totalBudget, chartData };
+        // 5.2 ฟังก์ชันช่วยจัดกลุ่มสถานะ (Case Insensitive)
+        const normalize = (status: string | undefined) => (status || '').toUpperCase().trim();
+
+        // 5.3 นับจำนวนตามกลุ่ม (รองรับทั้งภาษาไทยและอังกฤษ)
+        // Active Group (สีเหลือง)
+        const activeCount = projects.filter(p => {
+            const s = normalize(p.status);
+            return ['ACTIVE', 'IN_PROGRESS', 'DOING', 'START', 'ON_GOING', 'ดำเนินการ', 'กำลังทำ'].includes(s);
+        }).length;
+
+        // Pending/Hold Group (สีฟ้า)
+        const pendingCount = projects.filter(p => {
+            const s = normalize(p.status);
+            return ['PENDING', 'PENDING_REVIEW', 'HOLD', 'WAITING', 'QUEUE', 'รอตรวจสอบ', 'พัก'].includes(s);
+        }).length;
+
+        // Completed Group (สีเขียว)
+        const completedCount = projects.filter(p => {
+            const s = normalize(p.status);
+            return ['COMPLETED', 'COMPLETE', 'DONE', 'FINISH', 'SUCCESS', 'เสร็จสิ้น', 'เรียบร้อย'].includes(s);
+        }).length;
+
+        // Cancelled Group (สีแดง)
+        const cancelledCount = projects.filter(p => {
+            const s = normalize(p.status);
+            return ['CANCELLED', 'CANCEL', 'REJECT', 'VOID', 'ยกเลิก', 'ไม่อนุมัติ'].includes(s);
+        }).length;
+
+        // Draft Group (สีเทา)
+        const draftCount = projects.filter(p => {
+            const s = normalize(p.status);
+            return ['DRAFT', 'DRAF', 'ร่าง'].includes(s);
+        }).length;
+
+        // 5.4 จัดเตรียมข้อมูลกราฟ (ลำดับต้องตรงกับ COLORS ใน Dashboard.tsx)
+        const chartData = [
+            { name: 'Active', value: activeCount },       // เหลือง
+            { name: 'Pending', value: pendingCount },     // ฟ้า
+            { name: 'Completed', value: completedCount }, // เขียว
+            { name: 'Cancelled', value: cancelledCount }, // แดง
+            { name: 'Draft', value: draftCount }          // เทา
+        ];
+
+        return {
+            total: projects.length,
+            active: activeCount,
+            completed: completedCount,
+            totalBudget,
+            chartData
+        };
     };
 
     return (
         <ProjectContext.Provider value={{ 
             projects, 
-            auditLogs, 
-            isLoading,
+            loading, 
+            error, 
+            fetchProjects, 
             addProject, 
             updateProject, 
-            deleteProject,
+            deleteProject, 
             getStats 
         }}>
             {children}
