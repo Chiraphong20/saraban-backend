@@ -3,19 +3,23 @@ import { useProjects } from '../context/ProjectContext';
 import { Project, ProjectStatus } from '../types';
 import { Search, Plus, Filter, Edit2, Trash2, FileText, Eye, AlertCircle } from 'lucide-react';
 import ProjectModal from './ProjectModal';
-import ProjectTimelineModal from './ProjectTimelineModal';
-// 1. Import จาก antd
 import { message, Modal } from 'antd'; 
 
-const ProjectList: React.FC = () => {
+// ✅ เพิ่ม Interface Props
+interface ProjectListProps {
+    onNavigateToTimeline?: (id: number) => void;
+}
+
+// รับ Props เข้ามา
+const ProjectList: React.FC<ProjectListProps> = ({ onNavigateToTimeline }) => {
     const { projects, deleteProject } = useProjects();
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'ALL'>('ALL');
     
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingProject, setEditingProject] = useState<Project | undefined>(undefined);
-    const [isTimelineOpen, setIsTimelineOpen] = useState(false);
-    const [viewingProject, setViewingProject] = useState<Project | null>(null);
+
+    // ❌ ลบ State Modal Timeline เดิมออก เพราะไม่ใช้แล้ว
 
     const filteredProjects = projects.filter(project => {
         const term = searchTerm.toLowerCase();
@@ -28,7 +32,6 @@ const ProjectList: React.FC = () => {
         return matchesSearch && matchesStatus;
     });
 
-    // ✅ ฟังก์ชันลบที่ปรับปรุงใหม่ (ใช้ Ant Design Modal)
     const handleDelete = (id: number) => {
         Modal.confirm({
             title: 'ยืนยันการลบโครงการ',
@@ -41,7 +44,7 @@ const ProjectList: React.FC = () => {
             onOk: async () => {
                 try {
                     await deleteProject(id);
-                    message.success('ลบโครงการเรียบร้อยแล้ว'); // แจ้งเตือนสำเร็จ
+                    message.success('ลบโครงการเรียบร้อยแล้ว');
                 } catch (error) {
                     message.error('ไม่สามารถลบโครงการได้');
                 }
@@ -59,9 +62,11 @@ const ProjectList: React.FC = () => {
         setIsModalOpen(true);
     };
 
+    // ✅ เปลี่ยนฟังก์ชัน View Timeline ให้เปลี่ยนหน้า
     const handleViewTimeline = (project: Project) => {
-        setViewingProject(project);
-        setIsTimelineOpen(true);
+        if (onNavigateToTimeline) {
+            onNavigateToTimeline(project.id);
+        }
     };
 
     const getStatusColor = (status: string) => {
@@ -78,7 +83,7 @@ const ProjectList: React.FC = () => {
     };
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 animate-fade-in">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">จัดการโครงการ (Projects)</h1>
@@ -89,6 +94,7 @@ const ProjectList: React.FC = () => {
                 </button>
             </div>
 
+            {/* Filters */}
             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4">
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -109,6 +115,7 @@ const ProjectList: React.FC = () => {
                 </div>
             </div>
 
+            {/* Table */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full whitespace-nowrap">
@@ -135,7 +142,8 @@ const ProjectList: React.FC = () => {
                                         <td className="px-6 py-4"><div className="flex items-center"><div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold mr-2">{project.owner.charAt(0)}</div><span className="text-sm text-gray-600">{project.owner}</span></div></td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button onClick={() => handleViewTimeline(project)} className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="ดูประวัติ Timeline"><Eye size={16} /></button>
+                                                {/* ✅ ปุ่มดูรายละเอียด (เปลี่ยนหน้า) */}
+                                                <button onClick={() => handleViewTimeline(project)} className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="ดูรายละเอียด Timeline"><Eye size={16} /></button>
                                                 <button onClick={() => handleEdit(project)} className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="แก้ไข"><Edit2 size={16} /></button>
                                                 <button onClick={() => handleDelete(project.id)} className="p-1.5 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="ลบ"><Trash2 size={16} /></button>
                                             </div>
@@ -149,7 +157,6 @@ const ProjectList: React.FC = () => {
             </div>
 
             {isModalOpen && <ProjectModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} initialData={editingProject} />}
-            {isTimelineOpen && viewingProject && <ProjectTimelineModal isOpen={isTimelineOpen} onClose={() => setIsTimelineOpen(false)} project={viewingProject} />}
         </div>
     );
 };

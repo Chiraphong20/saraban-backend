@@ -220,6 +220,47 @@ app.get('/api/notifications', authenticateToken, (req, res) => {
         res.json(results);
     });
 });
+// --- User Profile Routes ---
+
+// 1. อัปเดตข้อมูลส่วนตัว (ชื่อ-นามสกุล)
+app.put('/api/profile', authenticateToken, (req, res) => {
+    const { fullname } = req.body;
+    const userId = req.user.id;
+
+    const sql = 'UPDATE users SET fullname = ? WHERE id = ?';
+    db.query(sql, [fullname, userId], (err, result) => {
+        if (err) return res.status(500).json(err);
+        
+        // บันทึก Log
+        logAction(userId, 'UPDATE', req.user.username, 'แก้ไขข้อมูลส่วนตัว');
+        
+        // ส่งข้อมูลใหม่กลับไป
+        res.json({ message: 'Profile updated successfully', user: { ...req.user, fullname } });
+    });
+});
+
+// 2. เปลี่ยนรหัสผ่าน (Change Password)
+app.put('/api/change-password', authenticateToken, (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user.id;
+
+    // 1. เช็คว่ารหัสเดิมถูกไหม
+    db.query('SELECT password FROM users WHERE id = ?', [userId], (err, results) => {
+        if (err) return res.status(500).json(err);
+        
+        if (results.length === 0 || results[0].password !== currentPassword) {
+            return res.status(401).json({ message: 'รหัสผ่านปัจจุบันไม่ถูกต้อง' });
+        }
+
+        // 2. อัปเดตรหัสใหม่
+        db.query('UPDATE users SET password = ? WHERE id = ?', [newPassword, userId], (updateErr) => {
+            if (updateErr) return res.status(500).json(updateErr);
+            
+            logAction(userId, 'UPDATE', req.user.username, 'ทำการเปลี่ยนรหัสผ่าน');
+            res.json({ message: 'Password changed successfully' });
+        });
+    });
+});
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });
