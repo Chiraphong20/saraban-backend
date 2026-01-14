@@ -324,6 +324,51 @@ app.delete('/api/features/:id', authenticateToken, (req, res) => {
         res.json({ message: 'Feature deleted successfully' });
     });
 });
+// --- Quick Notes Routes ---
+
+// 1. ดึง Note ทั้งหมดของ user
+app.get('/api/notes', authenticateToken, (req, res) => {
+    const username = req.user.username;
+    // ดึงเฉพาะของตัวเอง
+    db.query('SELECT * FROM quick_notes WHERE created_by = ? ORDER BY created_at DESC', [username], (err, results) => {
+        if (err) return res.status(500).json(err);
+        res.json(results);
+    });
+});
+
+// 2. สร้าง Note ใหม่
+app.post('/api/notes', authenticateToken, (req, res) => {
+    const { content } = req.body;
+    const username = req.user.username;
+    
+    db.query('INSERT INTO quick_notes (content, created_by) VALUES (?, ?)', [content, username], (err, result) => {
+        if (err) return res.status(500).json(err);
+        res.json({ id: result.insertId, content, created_by: username });
+    });
+});
+
+// 3. ลบ Note
+app.delete('/api/notes/:id', authenticateToken, (req, res) => {
+    db.query('DELETE FROM quick_notes WHERE id = ?', [req.params.id], (err) => {
+        if (err) return res.status(500).json(err);
+        res.json({ message: 'Deleted' });
+    });
+});
+// --- Quick Notes Routes (เพิ่มเติม) ---
+
+// 4. แก้ไข Note (Update) ✅ เพิ่มอันนี้เข้าไป
+app.put('/api/notes/:id', authenticateToken, (req, res) => {
+    const { content } = req.body;
+    const noteId = req.params.id;
+    const username = req.user.username; // ตรวจสอบว่าเป็นเจ้าของ note หรือไม่
+
+    const sql = 'UPDATE quick_notes SET content = ? WHERE id = ? AND created_by = ?';
+    
+    db.query(sql, [content, noteId, username], (err, result) => {
+        if (err) return res.status(500).json(err);
+        res.json({ message: 'Note updated successfully', content });
+    });
+});
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });
