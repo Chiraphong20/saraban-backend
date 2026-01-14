@@ -383,19 +383,21 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
                                 }}
                             />
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">สถานะ</label>
-                            <Select 
-                                className="w-full"
-                                value={formData.status}
-                                onChange={(val: any) => setFormData({...formData, status: val})}
-                            >
-                                <Option value="PENDING">รอดำเนินการ</Option>
-                                <Option value="IN_PROGRESS">กำลังทำ</Option>
-                                <Option value="COMPLETED">เสร็จสิ้น</Option>
-                                <Option value="DELAYED">ล่าช้า</Option>
-                            </Select>
-                        </div>
+                   <div className="mb-4">
+    <label className="block text-sm font-medium text-gray-700 mb-1">สถานะ</label>
+    <Select 
+        className="w-full"
+        value={formData.status}
+        onChange={(val) => setFormData({...formData, status: val})}
+        // ✅ ใช้วิธีนี้แทนครับ (หายแดงแน่นอน 100%)
+        options={[
+            { value: 'PENDING', label: 'รอดำเนินการ' },
+            { value: 'IN_PROGRESS', label: 'กำลังทำ' },
+            { value: 'COMPLETED', label: 'เสร็จสิ้น' },
+            { value: 'DELAYED', label: 'ล่าช้า' },
+        ]}
+    />
+</div>
                     </div>
 
                     <div>
