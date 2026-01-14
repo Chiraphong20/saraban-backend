@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useProjects } from '../context/ProjectContext';
-import { Project, ProjectStatus } from '../types';
+import { Project } from '../types';
 import { X, Save, RefreshCw } from 'lucide-react';
 
 interface ProjectModalProps {
@@ -9,6 +9,7 @@ interface ProjectModalProps {
     initialData?: Project;
 }
 
+// ประเภทโครงการสำหรับระบบ Auto-Gen Code
 const PROJECT_TYPES = [
     { code: 'P', label: 'Project (โครงการทั่วไป/ใหญ่)' },
     { code: 'SP', label: 'Sub Project (โครงการย่อย)' },
@@ -18,302 +19,290 @@ const PROJECT_TYPES = [
     { code: 'FND', label: 'Funding (ทุนสนับสนุน)' }
 ];
 
+// ✅ ตัวเลือกสถานะครบถ้วน (ตรงกับที่ Database รองรับ)
+const STATUS_OPTIONS = [
+    { value: 'DRAFT', label: 'Draft (ร่างโครงการ)' },
+    { value: 'PENDING', label: 'Pending (รอตรวจสอบ)' },
+    { value: 'ACTIVE', label: 'Active (กำลังดำเนินการ)' }, // 🟢 สำคัญ
+    { value: 'HOLD', label: 'Hold (พักโครงการ)' },         // 🔵 สำคัญ
+    { value: 'IN_PROGRESS', label: 'In Progress (ระหว่างทำ)' },
+    { value: 'COMPLETED', label: 'Completed (เสร็จสิ้น)' },
+    { value: 'CANCELLED', label: 'Cancelled (ยกเลิก)' }
+];
+
 const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, initialData }) => {
-    // 1. เพิ่มการดึง 'projects' ออกมาเพื่อใช้คำนวณเลขลำดับ
     const { projects, addProject, updateProject } = useProjects();
     
+    // State สำหรับ Auto-Gen Code
     const [acronym, setAcronym] = useState('');
     const [projectTypeCode, setProjectTypeCode] = useState('P');
     
+    // State สำหรับ Form Data
     const [formData, setFormData] = useState<Partial<Project>>({
         code: '',
         name: '',
+        description: '',
         owner: '',
         budget: 0,
-        startDate: '',
-        endDate: '',
         status: 'DRAFT',
-        description: ''
+        startDate: '',
+        endDate: ''
     });
 
-    // --- ฟังก์ชันสร้างรหัสแบบรันเลข (Auto Increment) ---
-    const generateCode = (acr: string, type: string) => {
-        const prefix = acr ? acr.toUpperCase() : 'XXX';
-        const currentYear = new Date().getFullYear();
-        const yearShort = currentYear.toString().slice(-2); // "25"
-        
-        // ลอจิกการหาเลขลำดับล่าสุด
-        let maxSequence = 0;
-
-        // วนลูปเช็คโครงการทั้งหมดที่มีอยู่
-        if (projects && projects.length > 0) {
-            projects.forEach(p => {
-                // สมมติ format เป็น: PREFIX-YY-TYPExxx (เช่น GS-25-P001)
-                const parts = p.code.split('-');
-                
-                // ต้องมี 3 ส่วน และส่วนกลางต้องตรงกับปีปัจจุบัน (25)
-                if (parts.length === 3 && parts[1] === yearShort) {
-                    const typeAndSeq = parts[2]; // เช่น P001, SP005
-                    
-                    // เช็คว่าส่วนท้ายขึ้นต้นด้วย Type ที่เราเลือกหรือไม่ (เช่น P)
-                    if (typeAndSeq.startsWith(type)) {
-                        // ตัด Type ออกเพื่อเอาตัวเลข (P001 -> 001)
-                        const seqString = typeAndSeq.substring(type.length);
-                        
-                        // แปลงเป็นตัวเลขและตรวจสอบว่าเป็นตัวเลขจริงๆ หรือไม่
-                        const seqNumber = parseInt(seqString, 10);
-                        if (!isNaN(seqNumber)) {
-                            // ถ้าเลขนี้มากกว่าที่เคยเจอ ให้จำไว้เป็นค่าสูงสุด
-                            if (seqNumber > maxSequence) {
-                                maxSequence = seqNumber;
-                            }
-                        }
-                    }
-                }
-            });
-        }
-
-        // เลขถัดไป = เลขสูงสุด + 1
-        const nextSequence = maxSequence + 1;
-        const sequenceStr = nextSequence.toString().padStart(3, '0'); // เติม 0 ข้างหน้าให้ครบ 3 หลัก
-
-        // รวมร่าง: GS-25-P001
-        return `${prefix}-${yearShort}-${type}${sequenceStr}`;
-    };
-
-    // อัปเดตรหัสทันทีเมื่อมีการเปลี่ยน Acronym หรือ Type (เฉพาะตอนสร้างใหม่)
-    useEffect(() => {
-        if (!initialData) {
-            const newCode = generateCode(acronym, projectTypeCode);
-            setFormData(prev => ({ ...prev, code: newCode }));
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [acronym, projectTypeCode, initialData, projects]); // เพิ่ม projects ใน dependency เพื่อให้คำนวณใหม่ถ้าข้อมูลเปลี่ยน
-
+    // โหลดข้อมูลเดิมเมื่อเปิด Modal (กรณีแก้ไข)
     useEffect(() => {
         if (initialData) {
-            setFormData(initialData);
-            const parts = initialData.code.split('-');
-            if (parts.length >= 2) {
-                setAcronym(parts[0]);
-                // พยายามดึง Type จากส่วนท้าย (เช่น P001 -> P)
-                // (อาจจะซับซ้อนหน่อยถ้า Type ยาวไม่เท่ากัน แต่เอาแบบง่ายคือดูว่ามัน Match กับ list เราไหม)
-                const lastPart = parts[2] || '';
-                const foundType = PROJECT_TYPES.find(t => lastPart.startsWith(t.code));
-                if (foundType) {
-                    setProjectTypeCode(foundType.code);
-                }
+            setFormData({
+                ...initialData,
+                budget: Number(initialData.budget), // แปลงเป็นตัวเลข
+                // ตัดเวลา T00:00:00 ออก เพื่อให้ใส่ใน <input type="date"> ได้
+                startDate: initialData.startDate ? initialData.startDate.split('T')[0] : '',
+                endDate: initialData.endDate ? initialData.endDate.split('T')[0] : ''
+            });
+
+            // พยายามดึง Acronym จากรหัสเดิม (เช่น 68-HR-P-001 -> ดึง HR)
+            const parts = initialData.code?.split('-');
+            if (parts && parts.length >= 3) {
+                setAcronym(parts[1]); 
             }
         } else {
-            setAcronym('');
-            setProjectTypeCode('P');
+            // กรณีสร้างใหม่ Reset ค่า
             setFormData({
-                // เรียกใช้ฟังก์ชัน generateCode เพื่อเริ่มรหัสแรก
-                code: generateCode('', 'P'), 
+                code: '',
                 name: '',
+                description: '',
                 owner: '',
                 budget: 0,
-                startDate: new Date().toISOString().split('T')[0],
-                endDate: '',
                 status: 'DRAFT',
-                description: ''
+                startDate: '',
+                endDate: ''
             });
+            setAcronym('');
         }
     }, [initialData, isOpen]);
 
-    const handleNameChange = (val: string) => {
-        setFormData({ ...formData, name: val });
-        if (!initialData && !acronym) {
-            const words = val.trim().split(/\s+/);
-            if (words.length > 0) {
-                let generatedAcronym = '';
-                if (words.length > 1) {
-                    generatedAcronym = words.map(w => w.charAt(0)).join('').substring(0, 3);
-                } else {
-                    generatedAcronym = words[0].substring(0, 2);
-                }
-                setAcronym(generatedAcronym.toUpperCase());
-            }
+    // ฟังก์ชันสร้างรหัสอัตโนมัติ (แก้ไขได้)
+    const generateCode = () => {
+        if (!acronym) {
+            alert("กรุณากรอกตัวย่อโครงการ (Acronym) ก่อนสร้างรหัส");
+            return;
         }
+        const currentYear = new Date().getFullYear() + 543; // ปี พ.ศ.
+        const yearShort = String(currentYear).slice(-2);    // 68
+        
+        // นับจำนวนโครงการในปีนี้
+        const count = projects.filter(p => p.code.startsWith(yearShort)).length + 1;
+        const runNumber = String(count).padStart(3, '0');
+
+        // Format: 68-HR-P-001
+        const newCode = `${yearShort}-${acronym.toUpperCase()}-${projectTypeCode}-${runNumber}`;
+        setFormData(prev => ({ ...prev, code: newCode }));
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (initialData) {
-            updateProject(initialData.id, formData);
-        } else {
-            if (!formData.name || !formData.code) return;
-            addProject(formData as Omit<Project, 'id'>);
+        try {
+            if (initialData && initialData.id) {
+                // โหมดแก้ไข: ส่งข้อมูลไป Update
+                await updateProject(initialData.id, formData);
+            } else {
+                // โหมดสร้างใหม่: ส่งข้อมูลไป Create
+                await addProject(formData as Project);
+            }
+            onClose(); // ปิด Modal เมื่อสำเร็จ
+        } catch (error) {
+            console.error(error);
+            alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
         }
-        onClose();
     };
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-            <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-                <div className="fixed inset-0 transition-opacity bg-black bg-opacity-60" onClick={onClose}></div>
-
-                <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-
-                <div className="inline-block w-full max-w-2xl px-4 pt-5 pb-4 overflow-hidden text-left align-bottom transition-all transform bg-white rounded-2xl shadow-xl sm:my-8 sm:align-middle sm:p-6 animate-fade-in-up">
-                    <div className="flex justify-between items-center mb-5 pb-4 border-b border-gray-100">
-                        <h3 className="text-xl font-bold text-gray-900">
-                            {initialData ? 'แก้ไขโครงการ' : 'เพิ่มโครงการใหม่'}
-                        </h3>
-                        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
-                            <X size={24} />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                <div className="p-6">
+                    {/* Header */}
+                    <div className="flex justify-between items-center mb-6 border-b pb-4">
+                        <h2 className="text-xl font-bold text-gray-800">
+                            {initialData ? '✏️ แก้ไขโครงการ' : '➕ สร้างโครงการใหม่'}
+                        </h2>
+                        <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                            <X size={24} className="text-gray-500" />
                         </button>
                     </div>
 
-                    <form onSubmit={handleSubmit} className="space-y-4">
+                    <form onSubmit={handleSubmit} className="space-y-6">
                         
-                        {/* --- ส่วน Config รหัสโครงการ --- */}
-                        {!initialData && (
-                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6">
-                                <h4 className="text-sm font-bold text-slate-700 mb-3 flex items-center">
-                                    <RefreshCw size={16} className="mr-2 text-blue-600" /> 
-                                    ตั้งค่ารหัสโครงการ
-                                </h4>
-                                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                                    <div className="md:col-span-4">
-                                        <label className="block text-xs font-semibold text-slate-500 mb-1">ตัวย่อ (Acronym)</label>
-                                        <input
-                                            type="text"
-                                            value={acronym}
-                                            onChange={(e) => setAcronym(e.target.value.toUpperCase())}
-                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 uppercase font-bold text-blue-700"
-                                            placeholder="เช่น GS"
-                                        />
-                                        <p className="text-[10px] text-slate-400 mt-1">มาจากชื่อโครงการ (Grow Store)</p>
-                                    </div>
-                                    <div className="md:col-span-8">
-                                        <label className="block text-xs font-semibold text-slate-500 mb-1">ประเภท/ขนาด (Type)</label>
-                                        <select
-                                            value={projectTypeCode}
-                                            onChange={(e) => setProjectTypeCode(e.target.value)}
-                                            className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 bg-white"
-                                        >
-                                            {PROJECT_TYPES.map(type => (
-                                                <option key={type.code} value={type.code}>
-                                                    {type.code} - {type.label}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
+                        {/* Section 1: ส่วนสร้างรหัส (ใช้ได้ทั้งสร้างใหม่และแก้ไข) */}
+                        <div className="bg-blue-50 p-5 rounded-xl border border-blue-100 shadow-sm">
+                            <h3 className="text-sm font-semibold text-blue-800 flex items-center gap-2 mb-3">
+                                <RefreshCw size={16} /> เครื่องมือสร้างรหัส (Optional)
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">ตัวย่อ (Acronym)</label>
+                                    <input
+                                        type="text"
+                                        value={acronym}
+                                        onChange={(e) => setAcronym(e.target.value.toUpperCase())}
+                                        placeholder="เช่น IT, HR"
+                                        className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none uppercase text-sm"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">ประเภท</label>
+                                    <select
+                                        value={projectTypeCode}
+                                        onChange={(e) => setProjectTypeCode(e.target.value)}
+                                        className="w-full px-3 py-2 bg-white border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                    >
+                                        {PROJECT_TYPES.map(t => (
+                                            <option key={t.code} value={t.code}>{t.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="flex items-end">
+                                    <button
+                                        type="button"
+                                        onClick={generateCode}
+                                        className="w-full px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-all shadow-sm active:scale-95"
+                                    >
+                                        กดสร้างรหัส
+                                    </button>
                                 </div>
                             </div>
-                        )}
+                        </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">รหัสโครงการ (Auto)</label>
+                        {/* Section 2: ข้อมูลหลัก (แก้ไขได้ทุกช่อง) */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            
+                            {/* รหัสโครงการ - แก้ไขมือได้ */}
+                            <div className="col-span-2 md:col-span-1">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    รหัสโครงการ <span className="text-red-500">*</span>
+                                </label>
                                 <input
                                     type="text"
-                                    required
-                                    readOnly
+                                    name="code"
                                     value={formData.code}
-                                    onChange={(e) => setFormData({...formData, code: e.target.value})}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 font-mono font-bold cursor-not-allowed"
+                                    onChange={handleChange}
+                                    required
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all font-mono text-blue-900 bg-gray-50 focus:bg-white"
+                                    placeholder="เช่น 68-IT-P-001"
                                 />
                             </div>
+
+                            {/* สถานะ - เลือกได้ครบ */}
+                            <div className="col-span-2 md:col-span-1">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    สถานะปัจจุบัน
+                                </label>
+                                <select
+                                    name="status"
+                                    value={formData.status}
+                                    onChange={handleChange}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                >
+                                    {STATUS_OPTIONS.map(status => (
+                                        <option key={status.value} value={status.value}>
+                                            {status.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    ชื่อโครงการ <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    name="name"
+                                    value={formData.name}
+                                    onChange={handleChange}
+                                    required
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+                                    placeholder="ระบุชื่อโครงการ"
+                                />
+                            </div>
+
+                            <div className="col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">รายละเอียด</label>
+                                <textarea
+                                    name="description"
+                                    value={formData.description}
+                                    onChange={handleChange}
+                                    rows={3}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all resize-none"
+                                    placeholder="รายละเอียดสังเขป..."
+                                />
+                            </div>
+
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">ผู้รับผิดชอบ</label>
                                 <input
                                     type="text"
-                                    required
+                                    name="owner"
                                     value={formData.owner}
-                                    onChange={(e) => setFormData({...formData, owner: e.target.value})}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    placeholder="ระบุชื่อผู้รับผิดชอบ"
+                                    onChange={handleChange}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                                 />
                             </div>
-                        </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">ชื่อโครงการ</label>
-                            <input
-                                type="text"
-                                required
-                                value={formData.name}
-                                onChange={(e) => handleNameChange(e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                placeholder="เช่น Grow Store"
-                            />
-                        </div>
-                        {/* ส่วนที่เหลือคงเดิม ... */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">รายละเอียดโดยย่อ</label>
-                            <textarea
-                                rows={3}
-                                value={formData.description}
-                                onChange={(e) => setFormData({...formData, description: e.target.value})}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                placeholder="อธิบายขอบเขตงานพอสังเขป..."
-                            />
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">งบประมาณ (บาท)</label>
                                 <input
                                     type="number"
-                                    min="0"
-                                    required
+                                    name="budget"
                                     value={formData.budget}
-                                    onChange={(e) => setFormData({...formData, budget: Number(e.target.value)})}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    onChange={handleChange}
+                                    min="0"
+                                    step="0.01"
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                                 />
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">สถานะ</label>
-                                <select
-                                    value={formData.status}
-                                    onChange={(e) => setFormData({...formData, status: e.target.value as ProjectStatus})}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white"
-                                >
-                                    <option value="DRAFT">Draft</option>
-                                    <option value="ACTIVE">Active</option>
-                                    <option value="HOLD">Hold</option>
-                                    <option value="COMPLETED">Completed</option>
-                                    <option value="CANCELLED">Cancelled</option>
-                                </select>
-                            </div>
-                        </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">วันที่เริ่ม</label>
                                 <input
                                     type="date"
+                                    name="startDate"
                                     value={formData.startDate}
-                                    onChange={(e) => setFormData({...formData, startDate: e.target.value})}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    onChange={handleChange}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                                 />
                             </div>
+
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">วันที่สิ้นสุด</label>
                                 <input
                                     type="date"
+                                    name="endDate"
                                     value={formData.endDate}
-                                    onChange={(e) => setFormData({...formData, endDate: e.target.value})}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    onChange={handleChange}
+                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                                 />
                             </div>
                         </div>
 
-                        <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-gray-100">
+                        {/* Footer Buttons */}
+                        <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-gray-100">
                             <button
                                 type="button"
                                 onClick={onClose}
-                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                                className="px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors"
                             >
                                 ยกเลิก
                             </button>
                             <button
                                 type="submit"
-                                className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-sm"
+                                className="inline-flex items-center px-5 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all hover:-translate-y-0.5"
                             >
                                 <Save size={18} className="mr-2" />
                                 บันทึกข้อมูล

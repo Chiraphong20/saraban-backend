@@ -170,7 +170,14 @@ app.delete('/api/logs/:logId', authenticateToken, (req, res) => {
         res.json({ message: 'Log deleted' });
     });
 });
-
+// 🔥 เพิ่ม Route นี้เข้าไปครับ (สำหรับดึง Log รวมทั้งหมด)
+app.get('/api/audit-logs', authenticateToken, (req, res) => {
+    const sql = 'SELECT * FROM audit_logs ORDER BY timestamp DESC';
+    db.query(sql, (err, results) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(results);
+    });
+});
 app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
 });
