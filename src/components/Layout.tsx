@@ -1,5 +1,6 @@
 import React, { ReactNode } from 'react';
-import { LayoutDashboard, FolderKanban, FileClock, Menu, X, Bell } from 'lucide-react';
+import { LayoutDashboard, FolderKanban, FileClock, Menu, X, Bell, LogOut } from 'lucide-react';
+import { useAuth } from '../context/AuthContext'; // ✅ 1. Import useAuth
 
 interface LayoutProps {
     children: ReactNode;
@@ -9,6 +10,7 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate }) => {
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
+    const { user, logout } = useAuth(); // ✅ 2. ดึงข้อมูล user และฟังก์ชัน logout มาใช้
 
     const menuItems = [
         { id: 'dashboard', label: 'ภาพรวมระบบ', icon: LayoutDashboard },
@@ -71,17 +73,33 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage, onNavigate }) =>
                     })}
                 </nav>
 
-                <div className="absolute bottom-0 w-full p-6 bg-slate-900 border-t border-slate-800">
-                    <div className="flex items-center">
-                        <img 
-                            src="https://picsum.photos/40/40" 
-                            alt="User" 
-                            className="w-10 h-10 rounded-full ring-2 ring-blue-500"
-                        />
-                        <div className="ml-3">
-                            <p className="text-sm font-medium text-white">Admin User</p>
-                            <p className="text-xs text-gray-400">Head of Department</p>
+                {/* ✅ 3. ส่วน User Profile และปุ่ม Logout */}
+                <div className="absolute bottom-0 w-full p-4 bg-slate-900 border-t border-slate-800">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center min-w-0">
+                            <img 
+                                src={`https://ui-avatars.com/api/?name=${user?.fullname}&background=random`} 
+                                alt="User" 
+                                className="w-10 h-10 rounded-full ring-2 ring-blue-500"
+                            />
+                            <div className="ml-3 truncate">
+                                <p className="text-sm font-medium text-white truncate">
+                                    {user?.fullname || 'Guest'}
+                                </p>
+                                <p className="text-xs text-gray-400 capitalize">
+                                    {user?.role || 'User'}
+                                </p>
+                            </div>
                         </div>
+                        
+                        {/* ปุ่ม Logout */}
+                        <button 
+                            onClick={logout}
+                            className="p-2 text-gray-400 hover:text-red-400 hover:bg-slate-800 rounded-lg transition-colors ml-2"
+                            title="ออกจากระบบ"
+                        >
+                            <LogOut size={20} />
+                        </button>
                     </div>
                 </div>
             </aside>

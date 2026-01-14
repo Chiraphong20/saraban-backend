@@ -3,33 +3,31 @@ import mysql from 'mysql2';
 import cors from 'cors';
 import bodyParser from 'body-parser';
 import jwt from 'jsonwebtoken';
-import 'dotenv/config'; // (Optional) เผื่อไว้ใช้ตอนรันในเครื่อง local
+import 'dotenv/config'; 
 
 const app = express();
 
-// ✅ แก้ไข 1: รับ Port จาก Render (ถ้าไม่มีให้ใช้ 3001)
+// ตั้งค่า Port และ Secret Key
 const PORT = process.env.PORT || 3001; 
-
-// ✅ แก้ไข 2: รับ Secret Key จาก Render (เพื่อความปลอดภัย)
 const SECRET_KEY = process.env.SECRET_KEY || 'SecretKey_Ja_Dont_Tell_Anyone';
 
 app.use(cors());
 app.use(bodyParser.json());
 
-// --- 1. เชื่อมต่อฐานข้อมูล (ปรับปรุงใหม่) ---
+// --- 1. เชื่อมต่อฐานข้อมูล ---
 const db = mysql.createConnection({
-    // ✅ ใช้ค่าจาก Environment Variables ที่เราไปตั้งใน Render
     host: process.env.DB_HOST || 'localhost',
     user: process.env.DB_USER || 'root',
     password: process.env.DB_PASSWORD || '',
     database: process.env.DB_NAME || 'saraban_track',
     port: process.env.DB_PORT || 3306,
-    // ✅ เพิ่มส่วนนี้: ป้องกัน Database หลุดเมื่อไม่มีคนใช้นานๆ
     enableKeepAlive: true,
     keepAliveInitialDelay: 0
 });
+
+// --- ฟังก์ชันสร้างตารางและ Admin อัตโนมัติ ---
 const initDb = () => {
-    // 1. สร้างตาราง Users
+    // 1. ตาราง Users
     const createUsersTable = `
         CREATE TABLE IF NOT EXISTS users (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -41,7 +39,7 @@ const initDb = () => {
         )
     `;
 
-    // 2. สร้างตาราง Projects
+    // 2. ตาราง Projects
     const createProjectsTable = `
         CREATE TABLE IF NOT EXISTS projects (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -57,7 +55,7 @@ const initDb = () => {
         )
     `;
 
-    // 3. สร้างตาราง Audit Logs
+    // 3. ตาราง Audit Logs
     const createAuditLogsTable = `
         CREATE TABLE IF NOT EXISTS audit_logs (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -74,8 +72,7 @@ const initDb = () => {
         if (err) console.error("❌ Error creating users table:", err);
         else {
             console.log("✅ Users table ready");
-            
-            // --- เพิ่มส่วนนี้: สร้าง Admin อัตโนมัติ ---
+            // --- สร้าง Admin อัตโนมัติ ---
             const checkAdmin = "SELECT * FROM users WHERE username = 'admin'";
             db.query(checkAdmin, (err, results) => {
                 if (!err && results.length === 0) {
@@ -87,7 +84,6 @@ const initDb = () => {
                     });
                 }
             });
-            // ----------------------------------------
         }
     });
 
@@ -101,14 +97,15 @@ const initDb = () => {
         else console.log("✅ Audit Logs table ready");
     });
 };
-// เรียกใช้งานฟังก์ชันทันทีที่ Server เริ่มทำงาน
-initDb();
+
+// เริ่มต้นเชื่อมต่อและสร้างตาราง
 db.connect(err => {
     if (err) {
         console.error('❌ Database connection failed:', err);
         return;
     }
     console.log('✅ Connected to MySQL Database');
+    initDb(); // เรียกทำงานสร้างตารางทันทีที่ต่อติด
 });
 
 // --- 2. Middleware: ตรวจสอบ Token ---
@@ -125,7 +122,7 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
-// --- 3. ฟังก์ชันบันทึก Log (Audit Trail) ---
+// --- 3. ฟังก์ชันบันทึก Log ---
 const logAction = (entityId, action, actor, details) => {
     const sql = 'INSERT INTO audit_logs (entity_id, action, actor, details) VALUES (?, ?, ?, ?)';
     db.query(sql, [entityId, action, actor, details], (err) => {
@@ -154,7 +151,7 @@ app.post('/api/login', (req, res) => {
     });
 });
 
-// 2. Register (สำหรับสร้าง Admin คนแรก)
+// 2. Register
 app.post('/api/register', (req, res) => {
     const { username, password, fullname } = req.body;
     const sql = 'INSERT INTO users (username, password, fullname) VALUES (?, ?, ?)';
@@ -194,7 +191,6 @@ app.put('/api/projects/:id', authenticateToken, (req, res) => {
     const { id } = req.params;
     const { code, name, description, owner, budget, status, startDate, endDate } = req.body;
     
-    // ดึงข้อมูลเก่าก่อนเพื่อเทียบความเปลี่ยนแปลง (Optional)
     db.query('SELECT * FROM projects WHERE id = ?', [id], (err, oldResults) => {
         if (err) return res.status(500).json(err);
         const oldProject = oldResults[0];
@@ -203,7 +199,6 @@ app.put('/api/projects/:id', authenticateToken, (req, res) => {
         db.query(sql, [code, name, description, owner, budget, status, startDate, endDate, id], (updateErr) => {
             if (updateErr) return res.status(500).json(updateErr);
 
-            // Log การเปลี่ยนแปลงสถานะ
             if (oldProject && oldProject.status !== status) {
                 logAction(id, 'UPDATE', req.user.fullname, `เปลี่ยนสถานะโครงการ ${code} จาก ${oldProject.status} เป็น ${status}`);
             } else {
@@ -220,7 +215,6 @@ app.delete('/api/projects/:id', authenticateToken, (req, res) => {
     const { id } = req.params;
     const actor = req.user.fullname;
 
-    // 1. ดึงชื่อโครงการมาก่อนเพื่อบันทึก Log
     db.query('SELECT * FROM projects WHERE id = ?', [id], (err, results) => {
         if (err) return res.status(500).json(err);
         if (results.length === 0) return res.status(404).json({ message: 'Project not found' });
@@ -228,10 +222,8 @@ app.delete('/api/projects/:id', authenticateToken, (req, res) => {
         const project = results[0];
         const logDetail = `ลบโครงการ: ${project.name} (${project.code})`;
         
-        // 2. บันทึก Log ก่อนลบ (เพื่อให้มีประวัติว่าใครลบอะไรไป)
         logAction(id, 'DELETE', actor, logDetail);
 
-        // 3. ลบจริง
         db.query('DELETE FROM projects WHERE id = ?', [id], (deleteErr) => {
             if (deleteErr) return res.status(500).json(deleteErr);
             res.json({ message: 'Project deleted successfully' });
@@ -241,7 +233,15 @@ app.delete('/api/projects/:id', authenticateToken, (req, res) => {
 
 // --- LOG ROUTES ---
 
-// Get Logs of a Project
+// ✅ เพิ่มใหม่: Get All Audit Logs (สำหรับแก้ปัญหา 404)
+app.get('/api/audit-logs', authenticateToken, (req, res) => {
+    db.query('SELECT * FROM audit_logs ORDER BY timestamp DESC', (err, results) => {
+        if (err) return res.status(500).json(err);
+        res.json(results);
+    });
+});
+
+// Get Logs of a Specific Project
 app.get('/api/projects/:id/logs', authenticateToken, (req, res) => {
     const { id } = req.params;
     db.query('SELECT * FROM audit_logs WHERE entity_id = ? ORDER BY timestamp DESC', [id], (err, results) => {
@@ -250,7 +250,7 @@ app.get('/api/projects/:id/logs', authenticateToken, (req, res) => {
     });
 });
 
-// Delete Log (Timeline Item)
+// Delete Log
 app.delete('/api/logs/:id', authenticateToken, (req, res) => {
     const { id } = req.params;
     db.query('DELETE FROM audit_logs WHERE id = ?', [id], (err) => {
