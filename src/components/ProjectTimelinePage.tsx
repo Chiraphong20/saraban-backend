@@ -9,7 +9,7 @@ import {
     MessageSquare, Clock, Send 
 } from 'lucide-react';
 import { message, Modal } from 'antd'; 
-import dayjs from 'dayjs'; // ✅ ต้องใช้ dayjs ช่วยคำนวณ
+import dayjs from 'dayjs';
 
 // Interface ของ Feature
 interface ProjectFeature {
@@ -80,16 +80,15 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
         }
     };
 
-    // --- 🌟 LOGIC ใหม่: สร้าง Timeline ยืดหยุ่นตามข้อมูลจริง (Dynamic) ---
+    // --- 🌟 LOGIC ใหม่: Dynamic Timeline (ยืดหยุ่นตามงานจริง) ---
     const timelineMonths = useMemo(() => {
         if (!project) return [];
 
         // 1. ตั้งต้นวันเริ่ม-จบ จาก Project ไว้ก่อน
-        // (ใช้ startDate หรือ start_date ตาม structure ของคุณ)
-        let minDate = dayjs((project as any).startDate || (project as any).start_date);
-        let maxDate = dayjs((project as any).endDate || (project as any).due_date);
+        let minDate = project.startDate ? dayjs(project.startDate) : dayjs();
+        let maxDate = project.endDate ? dayjs(project.endDate) : dayjs().add(3, 'month');
 
-        // 2. วนเช็ค Features ทุกตัว ถ้ามีตัวไหน วันเริ่มก่อน หรือ วันจบทีหลัง ให้ขยายช่วงเวลา
+        // 2. วนเช็ค Features ทุกตัว ถ้ามีตัวไหนลากยาวกว่า Project ให้ขยายขอบเขต Timeline
         if (features.length > 0) {
             features.forEach(feat => {
                 const featStart = dayjs(feat.start_date);
@@ -111,25 +110,27 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
         const months = [];
 
         // 4. Loop สร้างเดือน จนกว่าจะครอบคลุมวันที่สุดท้าย
-        // เงื่อนไข: วนไปเรื่อยๆ จนกว่า current จะเลย endLoop หรืออย่างน้อยต้องมี 4 เดือน (เพื่อความสวยงามตอนเริ่ม)
+        // (และเผื่อไว้อย่างน้อย 4 เดือนเสมอเพื่อให้ตารางไม่สั้นเกินไป)
         while (current.isBefore(endLoop) || current.isSame(endLoop, 'month') || months.length < 4) {
-            months.push(current.toDate()); // เก็บเป็น Date Object เพื่อใช้กับ Logic เดิม
+            months.push(current.toDate());
             current = current.add(1, 'month');
         }
 
         return months;
-    }, [project, features]); // คำนวณใหม่เมื่อ project หรือ features เปลี่ยน
+    }, [project, features]);
 
     // เช็คว่า Feature Active ในสัปดาห์นั้นหรือไม่
     const isFeatureActiveInWeek = (feature: ProjectFeature, monthDate: Date, weekIndex: number) => {
         const featStart = new Date(feature.start_date);
         const featEnd = new Date(feature.due_date);
+        
         const year = monthDate.getFullYear();
         const month = monthDate.getMonth();
+        
         let wStartDay = 1 + (weekIndex * 7);
         let wEndDay = (weekIndex + 1) * 7;
         
-        // สัปดาห์สุดท้ายของเดือน
+        // สัปดาห์สุดท้ายของเดือน (ให้ครอบคลุมวันสิ้นเดือน)
         if (weekIndex === 3) {
             wEndDay = new Date(year, month + 1, 0).getDate();
         }
@@ -264,7 +265,7 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
     return (
         <div className="space-y-6 animate-fade-in pb-20 bg-gray-50 min-h-screen relative">
             
-          {/* Header */}
+            {/* Header */}
             <div className="bg-white border-b px-6 py-4 flex items-center justify-between shadow-sm">
                 <div className="flex items-center gap-4">
                     <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500">
@@ -276,6 +277,7 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
                             <span className="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700 border border-blue-200">{project.status}</span>
                         </h1>
                         <p className="text-sm text-gray-500">
+                            {/* แสดงช่วงเวลา Timeline จริง */}
                             Timeline: {dayjs(timelineMonths[0]).format('MMM YY')} - {dayjs(timelineMonths[timelineMonths.length-1]).format('MMM YY')}
                         </p>
                     </div>
@@ -298,7 +300,7 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
                     </div>
                     {/* ✅ ใช้ overflow-x-auto เพื่อให้เลื่อนซ้ายขวาได้ถ้าเดือนเยอะ */}
                     <div className="overflow-x-auto">
-                        <table className="w-full border-collapse" style={{ minWidth: `${timelineMonths.length * 200}px` }}> 
+                        <table className="w-full border-collapse" style={{ minWidth: `${Math.max(1000, timelineMonths.length * 150)}px` }}> 
                             <thead>
                                 <tr>
                                     <th rowSpan={2} className="w-64 p-3 border-b border-r bg-gray-50 text-left text-xs font-bold text-gray-500 uppercase sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">

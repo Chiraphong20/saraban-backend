@@ -18,6 +18,7 @@ const PROJECT_TYPES = [
     { code: 'C', label: 'Consulting (ที่ปรึกษา)' },
     { code: 'B', label: 'Booth (บูธ/อีเวนต์)' },
     { code: 'FND', label: 'Funding (ทุนสนับสนุน)' }
+    
 ];
 
 const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
@@ -27,7 +28,8 @@ const STATUS_CONFIG: Record<string, { label: string; className: string }> = {
     'HOLD': { label: 'Hold (พักโครงการ)', className: 'bg-orange-50 text-orange-700 border-orange-200' },
     'IN_PROGRESS': { label: 'In Progress (ระหว่างทำ)', className: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
     'COMPLETED': { label: 'Completed (เสร็จสิ้น)', className: 'bg-green-50 text-green-700 border-green-200' },
-    'CANCELLED': { label: 'Cancelled (ยกเลิก)', className: 'bg-red-50 text-red-700 border-red-200' }
+    'CANCELLED': { label: 'Cancelled (ยกเลิก)', className: 'bg-red-50 text-red-700 border-red-200' },
+    'IDEA': { label: 'Idea (ริเริ่ม/ไอเดีย)', className: 'bg-purple-50 text-purple-600 border-purple-200' },
 };
 
 const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, initialData }) => {

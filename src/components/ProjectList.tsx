@@ -73,6 +73,7 @@ const ProjectList: React.FC<ProjectListProps> = ({ onNavigateToTimeline }) => {
     // Helper สีสถานะ
     const getStatusColor = (status: string) => {
         switch (status) {
+            case 'IDEA': return 'bg-purple-50 text-purple-700 border-purple-200'; 
             case 'DRAFT': return 'bg-gray-100 text-gray-600 border-gray-200';
             case 'PENDING': return 'bg-blue-50 text-blue-600 border-blue-200';
             case 'ACTIVE': return 'bg-yellow-50 text-yellow-700 border-yellow-200';
@@ -120,6 +121,7 @@ const ProjectList: React.FC<ProjectListProps> = ({ onNavigateToTimeline }) => {
                         onChange={(e) => setStatusFilter(e.target.value as ProjectStatus | 'ALL')} 
                         className="w-full p-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                     >
+                        <option value="IDEA">Idea (ริเริ่ม)</option>
                         <option value="ALL">ทุกสถานะ</option>
                         <option value="DRAFT">Draft (ร่าง)</option>
                         <option value="PENDING">Pending (รอตรวจสอบ)</option>
