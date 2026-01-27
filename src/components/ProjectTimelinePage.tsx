@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { useProjects } from '../context/ProjectContext';
@@ -6,9 +6,10 @@ import { Project } from '../types';
 import { 
     ArrowLeft, Calendar, User, 
     Plus, Save, X, Edit2, Trash2, AlertCircle,
-    MessageSquare, Clock, Send // ✅ เพิ่มไอคอนสำหรับ Note
+    MessageSquare, Clock, Send 
 } from 'lucide-react';
 import { message, Modal } from 'antd'; 
+import dayjs from 'dayjs'; // ✅ ต้องใช้ dayjs ช่วยคำนวณ
 
 // Interface ของ Feature
 interface ProjectFeature {
@@ -23,7 +24,7 @@ interface ProjectFeature {
     note_by: string;
 }
 
-// ✅ Interface สำหรับ Note ย่อย
+// Interface สำหรับ Note ย่อย
 interface FeatureNote {
     id: number;
     content: string;
@@ -43,7 +44,7 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
     const [features, setFeatures] = useState<ProjectFeature[]>([]); 
     const [loading, setLoading] = useState(true);
 
-    // --- Modal State สำหรับ Add/Edit Feature ---
+    // Modal States
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null); 
     const [formData, setFormData] = useState({
@@ -51,7 +52,7 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
         start_date: '', due_date: '', remark: ''
     });
 
-    // --- ✅ Modal State สำหรับ Notes (เพิ่มใหม่) ---
+    // Note Modal States
     const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
     const [currentFeatureForNote, setCurrentFeatureForNote] = useState<ProjectFeature | null>(null);
     const [featureNotes, setFeatureNotes] = useState<FeatureNote[]>([]);
@@ -79,22 +80,47 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
         }
     };
 
-    // --- Logic สร้าง Timeline รายสัปดาห์ (คงเดิม) ---
-    const getMonthRange = () => {
+    // --- 🌟 LOGIC ใหม่: สร้าง Timeline ยืดหยุ่นตามข้อมูลจริง (Dynamic) ---
+    const timelineMonths = useMemo(() => {
         if (!project) return [];
-        const start = new Date(project.startDate);
-        const end = new Date(project.endDate);
-        const months = [];
-        const current = new Date(start);
-        current.setDate(1); 
-        while (current <= end || months.length < 4) {
-            months.push(new Date(current));
-            current.setMonth(current.getMonth() + 1);
-        }
-        return months;
-    };
-    const timelineMonths = getMonthRange();
 
+        // 1. ตั้งต้นวันเริ่ม-จบ จาก Project ไว้ก่อน
+        // (ใช้ startDate หรือ start_date ตาม structure ของคุณ)
+        let minDate = dayjs((project as any).startDate || (project as any).start_date);
+        let maxDate = dayjs((project as any).endDate || (project as any).due_date);
+
+        // 2. วนเช็ค Features ทุกตัว ถ้ามีตัวไหน วันเริ่มก่อน หรือ วันจบทีหลัง ให้ขยายช่วงเวลา
+        if (features.length > 0) {
+            features.forEach(feat => {
+                const featStart = dayjs(feat.start_date);
+                const featEnd = dayjs(feat.due_date);
+                
+                if (featStart.isValid() && featStart.isBefore(minDate)) {
+                    minDate = featStart;
+                }
+                if (featEnd.isValid() && featEnd.isAfter(maxDate)) {
+                    maxDate = featEnd;
+                }
+            });
+        }
+
+        // 3. ปรับให้เป็น ต้นเดือน (Start) และ สิ้นเดือน (End) เพื่อความสวยงาม
+        let current = minDate.startOf('month');
+        const endLoop = maxDate.endOf('month');
+        
+        const months = [];
+
+        // 4. Loop สร้างเดือน จนกว่าจะครอบคลุมวันที่สุดท้าย
+        // เงื่อนไข: วนไปเรื่อยๆ จนกว่า current จะเลย endLoop หรืออย่างน้อยต้องมี 4 เดือน (เพื่อความสวยงามตอนเริ่ม)
+        while (current.isBefore(endLoop) || current.isSame(endLoop, 'month') || months.length < 4) {
+            months.push(current.toDate()); // เก็บเป็น Date Object เพื่อใช้กับ Logic เดิม
+            current = current.add(1, 'month');
+        }
+
+        return months;
+    }, [project, features]); // คำนวณใหม่เมื่อ project หรือ features เปลี่ยน
+
+    // เช็คว่า Feature Active ในสัปดาห์นั้นหรือไม่
     const isFeatureActiveInWeek = (feature: ProjectFeature, monthDate: Date, weekIndex: number) => {
         const featStart = new Date(feature.start_date);
         const featEnd = new Date(feature.due_date);
@@ -102,22 +128,28 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
         const month = monthDate.getMonth();
         let wStartDay = 1 + (weekIndex * 7);
         let wEndDay = (weekIndex + 1) * 7;
+        
+        // สัปดาห์สุดท้ายของเดือน
         if (weekIndex === 3) {
             wEndDay = new Date(year, month + 1, 0).getDate();
         }
+        
         const weekStartDate = new Date(year, month, wStartDay);
         const weekEndDate = new Date(year, month, wEndDay);
+        
+        // เช็คช่วงเวลาทับซ้อน
         return (featStart <= weekEndDate && featEnd >= weekStartDate);
     };
 
-    // --- CRUD Handlers (Feature) ---
+    // --- CRUD Handlers ---
 
     const openAddModal = () => {
         setEditingId(null);
+        // Default วันที่ให้เป็น วันปัจจุบัน
         setFormData({
             title: '', detail: '', next_list: '', status: 'PENDING',
-            start_date: project?.startDate ? project.startDate.split('T')[0] : '', 
-            due_date: project?.endDate ? project.endDate.split('T')[0] : '', 
+            start_date: dayjs().format('YYYY-MM-DD'), 
+            due_date: dayjs().add(7, 'day').format('YYYY-MM-DD'), 
             remark: ''
         });
         setIsModalOpen(true);
@@ -165,7 +197,7 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
     const handleDelete = (id: number) => {
         Modal.confirm({
             title: 'ยืนยันการลบ',
-            content: 'คุณต้องการลบแผนงานนี้ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้',
+            content: 'คุณต้องการลบแผนงานนี้ใช่หรือไม่?',
             okText: 'ลบ',
             okType: 'danger',
             cancelText: 'ยกเลิก',
@@ -184,8 +216,7 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
         });
     };
 
-    // --- ✅ Handlers สำหรับ Notes ---
-
+    // --- Notes Handlers ---
     const openNoteModal = async (feature: ProjectFeature) => {
         setCurrentFeatureForNote(feature);
         setIsNoteModalOpen(true);
@@ -210,11 +241,10 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
                 { content: newMeetingNote }, 
                 { headers: { Authorization: `Bearer ${token}` } }
             );
-            // เพิ่ม Note ใหม่เข้า state ทันที
             const newNoteObj: FeatureNote = {
                 id: res.data.id || Date.now(),
                 content: newMeetingNote,
-                created_by: user?.fullname || 'Me', // ใช้ชื่อจริงถ้ามี
+                created_by: user?.fullname || 'Me',
                 created_at: new Date().toISOString()
             };
             setFeatureNotes([newNoteObj, ...featureNotes]);
@@ -234,8 +264,8 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
     return (
         <div className="space-y-6 animate-fade-in pb-20 bg-gray-50 min-h-screen relative">
             
-            {/* Header */}
-            <div className="bg-white border-b px-6 py-4 flex items-center justify-between sticky top-0 z-20 shadow-sm">
+          {/* Header */}
+            <div className="bg-white border-b px-6 py-4 flex items-center justify-between shadow-sm">
                 <div className="flex items-center gap-4">
                     <button onClick={onBack} className="p-2 hover:bg-gray-100 rounded-full transition-colors text-gray-500">
                         <ArrowLeft size={20} />
@@ -245,7 +275,9 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
                             {project.name}
                             <span className="px-2 py-0.5 rounded text-xs bg-blue-100 text-blue-700 border border-blue-200">{project.status}</span>
                         </h1>
-                        <p className="text-sm text-gray-500">Code: {project.code}</p>
+                        <p className="text-sm text-gray-500">
+                            Timeline: {dayjs(timelineMonths[0]).format('MMM YY')} - {dayjs(timelineMonths[timelineMonths.length-1]).format('MMM YY')}
+                        </p>
                     </div>
                 </div>
                 <div className="flex gap-2">
@@ -257,16 +289,16 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
 
             <div className="px-6 space-y-6">
 
-                {/* --- 🟢 ส่วนที่ 1: Weekly Gantt Chart --- */}
+                {/* --- 🟢 ส่วนที่ 1: Weekly Gantt Chart (Dynamic Scrolling) --- */}
                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                    {/* ... (Code ส่วน Gantt Chart เหมือนเดิม ไม่ได้แก้) ... */}
                     <div className="p-4 border-b bg-blue-50/50 flex justify-between items-center">
                         <h2 className="font-bold text-blue-800 flex items-center gap-2">
-                            <Calendar size={18} /> WEEKLY PROJECT PLAN
+                            <Calendar size={18} /> PROJECT PLAN ({timelineMonths.length} Months)
                         </h2>
                     </div>
+                    {/* ✅ ใช้ overflow-x-auto เพื่อให้เลื่อนซ้ายขวาได้ถ้าเดือนเยอะ */}
                     <div className="overflow-x-auto">
-                        <table className="w-full min-w-[1000px] border-collapse">
+                        <table className="w-full border-collapse" style={{ minWidth: `${timelineMonths.length * 200}px` }}> 
                             <thead>
                                 <tr>
                                     <th rowSpan={2} className="w-64 p-3 border-b border-r bg-gray-50 text-left text-xs font-bold text-gray-500 uppercase sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">
@@ -341,7 +373,6 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
                                     <th className="p-4 font-medium w-28 text-center">Status</th>
                                     <th className="p-4 font-medium w-32 text-center">Duration</th>
                                     <th className="p-4 font-medium w-32">Remark</th>
-                                    {/* ✅ เพิ่ม Column Notes */}
                                     <th className="p-4 font-medium w-24 text-center">Notes</th> 
                                 </tr>
                             </thead>
@@ -376,7 +407,6 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
                                         <td className="p-4 text-gray-500 italic">
                                             {feat.remark || '-'}
                                         </td>
-                                        {/* ✅ ปุ่มเปิด Notes Modal */}
                                         <td className="p-4 text-center">
                                             <button 
                                                 onClick={() => openNoteModal(feat)}
@@ -465,12 +495,10 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
                 </div>
             )}
 
-            {/* --- 🟠 Modal: Meeting Notes (เพิ่มใหม่) --- */}
+            {/* --- 🟠 Modal: Meeting Notes --- */}
             {isNoteModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col h-[500px]">
-                        
-                        {/* Note Header */}
                         <div className="p-4 border-b bg-yellow-50 flex justify-between items-center">
                             <div>
                                 <h3 className="font-bold text-yellow-800 flex items-center gap-2">
@@ -482,8 +510,6 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
                             </div>
                             <button onClick={() => setIsNoteModalOpen(false)} className="p-1 hover:bg-yellow-100 rounded-full text-yellow-700"><X size={20} /></button>
                         </div>
-
-                        {/* Note List (Chat Area) */}
                         <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
                             {isNoteLoading ? (
                                 <div className="text-center text-gray-400 mt-20">กำลังโหลดบันทึก...</div>
@@ -507,8 +533,6 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
                                 ))
                             )}
                         </div>
-
-                        {/* Note Input Area */}
                         <div className="p-3 bg-white border-t border-gray-100">
                             <div className="flex gap-2 items-end">
                                 <textarea 
@@ -523,11 +547,7 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
                                         }
                                     }}
                                 />
-                                <button 
-                                    onClick={handleSendNote} 
-                                    disabled={!newMeetingNote.trim()}
-                                    className="bg-yellow-500 text-white p-3 rounded-xl hover:bg-yellow-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors shadow-sm"
-                                >
+                                <button onClick={handleSendNote} disabled={!newMeetingNote.trim()} className="bg-yellow-500 text-white p-3 rounded-xl hover:bg-yellow-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors shadow-sm">
                                     <Send size={20} />
                                 </button>
                             </div>
