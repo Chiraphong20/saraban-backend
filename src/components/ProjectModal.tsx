@@ -41,8 +41,9 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, initialDat
     // ... (ส่วน Logic generateCode เดิม ไม่ต้องแก้)
     const generateCode = (acr: string, type: string) => {
         const prefix = acr ? acr.toUpperCase() : 'XXX';
-        const currentYear = new Date().getFullYear();
-        const yearShort = currentYear.toString().slice(-2); 
+      const startDateVal = formData.startDate ? new Date(formData.startDate) : new Date();
+    const yearShort = startDateVal.getFullYear().toString().slice(-2); 
+    
         let maxSequence = 0;
         if (projects && projects.length > 0) {
             projects.forEach(p => {
@@ -62,12 +63,12 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, initialDat
         return `${prefix}-${yearShort}-${type}${sequenceStr}`;
     };
 
-    useEffect(() => {
-        if (!initialData) {
-            const newCode = generateCode(acronym, projectTypeCode);
-            setFormData(prev => ({ ...prev, code: newCode }));
-        }
-    }, [acronym, projectTypeCode, initialData, projects]);
+   useEffect(() => {
+    if (!initialData) {
+        const newCode = generateCode(acronym, projectTypeCode);
+        setFormData(prev => ({ ...prev, code: newCode }));
+    }
+}, [acronym, projectTypeCode, initialData, projects, formData.startDate]); 
 
     useEffect(() => {
         if (initialData) {
