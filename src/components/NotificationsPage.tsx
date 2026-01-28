@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react';
 import { useNotifications } from '../context/NotificationContext';
-import { CheckCircle, Info, XCircle, AlertTriangle, Clock, User, Bell } from 'lucide-react';
+import { CheckCircle, Info, XCircle, AlertTriangle, Clock, User, FileText } from 'lucide-react';
+import dayjs from 'dayjs';
+import 'dayjs/locale/th';
 
 const NotificationsPage: React.FC = () => {
     const { notifications, markAsRead } = useNotifications();
@@ -13,75 +15,96 @@ const NotificationsPage: React.FC = () => {
     // Helper: เลือกไอคอน
     const getIcon = (action: string) => {
         switch (action) {
-            case 'CREATE': return <CheckCircle size={20} className="text-green-500" />;
-            case 'UPDATE': return <Info size={20} className="text-blue-500" />;
-            case 'DELETE': return <XCircle size={20} className="text-red-500" />;
-            default: return <AlertTriangle size={20} className="text-yellow-500" />;
+            case 'CREATE': return <CheckCircle size={24} className="text-green-500" />;
+            case 'UPDATE': return <Info size={24} className="text-blue-500" />;
+            case 'DELETE': return <XCircle size={24} className="text-red-500" />;
+            case 'PLAN': return <FileText size={24} className="text-purple-500" />; // ไอคอนสำหรับ Timeline
+            default: return <AlertTriangle size={24} className="text-yellow-500" />;
         }
     };
 
     // Helper: สีพื้นหลัง
     const getBgColor = (action: string) => {
         switch (action) {
-            case 'CREATE': return 'bg-green-50 border-green-100';
-            case 'UPDATE': return 'bg-blue-50 border-blue-100';
-            case 'DELETE': return 'bg-red-50 border-red-100';
+            case 'CREATE': return 'bg-green-50 border-green-100 hover:bg-green-100';
+            case 'UPDATE': return 'bg-blue-50 border-blue-100 hover:bg-blue-100';
+            case 'DELETE': return 'bg-red-50 border-red-100 hover:bg-red-100';
+            case 'PLAN': return 'bg-purple-50 border-purple-100 hover:bg-purple-100';
             default: return 'bg-gray-50 border-gray-100';
         }
     };
 
     return (
-        <div className="space-y-6 animate-fade-in">
-            <div className="flex items-center gap-3">
-                <Bell className="text-blue-600" size={28} />
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900">การแจ้งเตือนทั้งหมด</h1>
-                    <p className="text-gray-500">ประวัติกิจกรรมล่าสุดในระบบ</p>
+        <div className="p-6 max-w-4xl mx-auto animate-fade-in pb-20">
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                <div className="p-5 border-b bg-gray-50 flex justify-between items-center">
+                    <h1 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                        <Info className="text-blue-600" /> การแจ้งเตือนทั้งหมด
+                    </h1>
+                    <span className="text-xs text-gray-500">แสดง 50 รายการล่าสุด</span>
                 </div>
-            </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 {notifications.length === 0 ? (
-                    <div className="p-12 text-center text-gray-400">
-                        <Bell size={48} className="mx-auto mb-4 opacity-20" />
-                        <p>ยังไม่มีการแจ้งเตือน</p>
+                    <div className="p-10 text-center text-gray-400 flex flex-col items-center">
+                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-3">
+                            <Info size={30} />
+                        </div>
+                        <p>ไม่มีการแจ้งเตือนใหม่</p>
                     </div>
                 ) : (
                     <div className="divide-y divide-gray-100">
                         {notifications.map((log) => (
-                            <div key={log.id} className={`p-4 hover:bg-white transition-colors border-l-4 ${getBgColor(log.action)}`}>
+                            <div 
+                                key={log.id} 
+                                className={`p-4 transition-all duration-200 border-l-4 ${
+                                    log.action === 'CREATE' ? 'border-l-green-500' :
+                                    log.action === 'DELETE' ? 'border-l-red-500' :
+                                    log.action === 'PLAN' ? 'border-l-purple-500' :
+                                    'border-l-blue-500'
+                                } hover:shadow-md cursor-default bg-white`}
+                            >
                                 <div className="flex gap-4">
+                                    {/* Icon Section */}
                                     <div className="mt-1 flex-shrink-0">
                                         {getIcon(log.action)}
                                     </div>
+
+                                    {/* Content Section */}
                                     <div className="flex-1 min-w-0">
-                                        <div className="flex justify-between items-start">
-                                            <p className="text-sm font-medium text-gray-900">
-                                                {log.details}
+                                        <div className="flex justify-between items-start mb-1">
+                                            {/* ✅ ส่วนสำคัญ: แสดงรายละเอียด (details) ที่บันทึกมาจาก ProjectList/Timeline */}
+                                            <p className="font-semibold text-gray-800 text-sm md:text-base break-words">
+                                                {log.details || "ไม่มีรายละเอียด"}
                                             </p>
-                                            <span className="text-xs text-gray-400 flex items-center gap-1 whitespace-nowrap ml-2">
+                                            <span className="text-[10px] text-gray-400 flex-shrink-0 flex items-center gap-1 ml-2 bg-gray-50 px-2 py-1 rounded-full">
                                                 <Clock size={12} />
-                                                {new Date(log.timestamp).toLocaleString('th-TH')}
+                                                {log.timestamp 
+                                                    ? dayjs(log.timestamp).locale('th').format('D MMM BB HH:mm') 
+                                                    : '-'}
                                             </span>
                                         </div>
-                                        
+
                                         <div className="flex items-center gap-3 mt-2">
-                                            {log.project_code && (
-                                                <span className="px-2 py-0.5 rounded text-xs font-bold bg-white border border-gray-200 text-gray-600">
-                                                    {log.project_code}
-                                                </span>
-                                            )}
-                                            <span className="flex items-center gap-1 text-xs text-gray-500">
+                                            <span className="flex items-center gap-1.5 text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-md">
                                                 <User size={12} />
-                                                {log.actor}
+                                                <span className="font-medium text-gray-700">{log.actor || 'System'}</span>
                                             </span>
-                                            <span className={`text-[10px] px-1.5 py-0.5 rounded border ${
-                                                log.action === 'CREATE' ? 'bg-green-100 text-green-700 border-green-200' :
-                                                log.action === 'DELETE' ? 'bg-red-100 text-red-700 border-red-200' :
-                                                'bg-blue-100 text-blue-700 border-blue-200'
+
+                                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${
+                                                log.action === 'CREATE' ? 'bg-green-100 text-green-700' :
+                                                log.action === 'DELETE' ? 'bg-red-100 text-red-700' :
+                                                log.action === 'PLAN' ? 'bg-purple-100 text-purple-700' :
+                                                'bg-blue-100 text-blue-700'
                                             }`}>
                                                 {log.action}
                                             </span>
+                                            
+                                            {/* ถ้ามี project_code ให้แสดง (แต่ปัจจุบัน backend ส่งเป็น System) */}
+                                            {log.project_code && log.project_code !== 'System' && (
+                                                <span className="text-xs text-gray-400">
+                                                     Ref: {log.project_code}
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
