@@ -3,22 +3,22 @@ import { useProjects } from '../context/ProjectContext';
 import { Project, ProjectStatus } from '../types';
 import { Search, Plus, Filter, Edit2, Trash2, FileText, Eye, AlertCircle } from 'lucide-react';
 import ProjectModal from './ProjectModal';
-// import ProjectTimelineModal from './ProjectTimelineModal'; // ❌ ไม่ใช้แล้ว ลบออกได้เลย
 import { message, Modal } from 'antd'; 
 
-// ✅ เพิ่ม Interface Props รับฟังก์ชันเปลี่ยนหน้า
-interface ProjectListProps {
-    onNavigateToTimeline?: (id: number) => void;
-}
+// 1. ✅ Import useNavigate จาก Router
+import { useNavigate } from 'react-router-dom';
 
-const ProjectList: React.FC<ProjectListProps> = ({ onNavigateToTimeline }) => {
+const ProjectList: React.FC = () => {
     const { projects, deleteProject } = useProjects();
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<ProjectStatus | 'ALL'>('ALL');
     
-    // State สำหรับ Modal แก้ไข/สร้าง (ยังใช้อยู่)
+    // State สำหรับ Modal แก้ไข/สร้าง
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingProject, setEditingProject] = useState<Project | undefined>(undefined);
+
+    // 2. ✅ เรียกใช้ Hook
+    const navigate = useNavigate();
 
     // Filter Logic
     const filteredProjects = projects.filter(project => {
@@ -63,11 +63,9 @@ const ProjectList: React.FC<ProjectListProps> = ({ onNavigateToTimeline }) => {
         setIsModalOpen(true);
     };
 
-    // ✅ ฟังก์ชันใหม่: เปลี่ยนหน้าไป Timeline Full Page
+    // 3. ✅ แก้ฟังก์ชันนี้ให้ใช้ navigate ของ Router
     const handleViewTimeline = (project: Project) => {
-        if (onNavigateToTimeline) {
-            onNavigateToTimeline(project.id);
-        }
+        navigate(`/project/${project.id}/timeline`);
     };
 
     // Helper สีสถานะ
@@ -188,7 +186,6 @@ const ProjectList: React.FC<ProjectListProps> = ({ onNavigateToTimeline }) => {
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                {/* ✅ ปุ่ม Eye Icon: กดแล้วไปหน้า Timeline Full Page */}
                                                 <button 
                                                     onClick={() => handleViewTimeline(project)}
                                                     className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
@@ -220,7 +217,7 @@ const ProjectList: React.FC<ProjectListProps> = ({ onNavigateToTimeline }) => {
                 </div>
             </div>
 
-            {/* Modal สำหรับสร้าง/แก้ไข (ยังคงใช้ Modal เหมือนเดิม) */}
+            {/* Modal สำหรับสร้าง/แก้ไข */}
             {isModalOpen && (
                 <ProjectModal 
                     isOpen={isModalOpen} 
@@ -228,8 +225,6 @@ const ProjectList: React.FC<ProjectListProps> = ({ onNavigateToTimeline }) => {
                     initialData={editingProject} 
                 />
             )}
-            
-            {/* ❌ ลบ ProjectTimelineModal ออกจากตรงนี้แล้ว เพราะย้ายไปหน้าใหม่ */}
         </div>
     );
 };

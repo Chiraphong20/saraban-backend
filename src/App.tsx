@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 // Import Contexts
 import { ProjectProvider } from './context/ProjectContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -11,82 +12,75 @@ import ProjectList from './components/ProjectList';
 import AuditLogViewer from './components/AuditLogViewer';
 import NotificationsPage from './components/NotificationsPage';
 import ProfilePage from './components/ProfilePage';
-import ProjectTimelinePage from './components/ProjectTimelinePage'; // ✅ Import หน้า Timeline ใหม่
+import ProjectTimelinePage from './components/ProjectTimelinePage';
 import Login from './components/Login';
 
+// Component สำหรับจัดการเนื้อหาข้างใน
 const AppContent: React.FC = () => {
   const { user } = useAuth();
-  
-  // State สำหรับจัดการหน้าปัจจุบัน
-  const [currentPage, setCurrentPage] = useState('dashboard');
-  
-  // ✅ State เก็บ ID ของโปรเจกต์ที่จะดู Timeline
-  const [viewingProjectId, setViewingProjectId] = useState<number | null>(null);
+  const location = useLocation(); // ✅ ใช้ Hook นี้ได้แล้วเพราะถูกครอบด้วย BrowserRouter แล้ว
 
   // ถ้ายังไม่ Login ให้แสดงหน้า Login
   if (!user) {
     return <Login />;
   }
 
-  // ✅ ฟังก์ชันช่วยเปลี่ยนหน้าไป Timeline พร้อมส่ง ID
-  const navigateToProjectTimeline = (id: number) => {
-    setViewingProjectId(id);
-    setCurrentPage('project_timeline');
-  };
-
-  // Logic การเลือกหน้าที่จะแสดง
-  const renderPage = () => {
-    switch (currentPage) {
-      case 'dashboard': 
-        return <Dashboard onNavigate={setCurrentPage} />;
-      
-      case 'projects': 
-        // ✅ ส่ง prop onNavigateToTimeline ไปให้ ProjectList
-        return <ProjectList onNavigateToTimeline={navigateToProjectTimeline} />;
-      
-      case 'logs': 
-        return <AuditLogViewer />;
-      
-      case 'notifications': 
-        return <NotificationsPage />;
-      
-      case 'profile': 
-        return <ProfilePage />;
-      
-      // ✅ Case ใหม่: หน้า Timeline เต็มจอ
-      case 'project_timeline': 
-        return viewingProjectId ? (
-            <ProjectTimelinePage 
-                projectId={viewingProjectId} 
-                onBack={() => setCurrentPage('projects')} // กด Back ให้กลับไปหน้า Project List
-            />
-        ) : (
-            // กันพลาด: ถ้าไม่มี ID ให้กลับไปหน้า List
-            <ProjectList onNavigateToTimeline={navigateToProjectTimeline} />
-        );
-
-      default: 
-        return <Dashboard onNavigate={setCurrentPage} />;
-    }
+  // ฟังก์ชันเช็คว่าตอนนี้อยู่หน้าไหน (ส่งให้ Layout เพื่อ Highligh เมนู)
+  const getCurrentPageName = () => {
+    const path = location.pathname;
+    if (path === '/') return 'dashboard';
+    if (path.startsWith('/projects')) return 'projects';
+    if (path.startsWith('/logs')) return 'logs';
+    if (path.startsWith('/notifications')) return 'notifications';
+    if (path.startsWith('/profile')) return 'profile';
+    if (path.startsWith('/project/')) return 'projects'; // หน้า Timeline ให้ Highlight เมนู Projects
+    return 'dashboard';
   };
 
   return (
-    // เรียงลำดับ Provider: Auth -> Notification -> Project -> Layout
-    <NotificationProvider>
-      <ProjectProvider>
-        <Layout currentPage={currentPage} onNavigate={setCurrentPage}>
-          {renderPage()}
+    <ProjectProvider>
+      <NotificationProvider>
+        {/* ส่ง currentPage ตาม URL ปัจจุบันไปให้ Layout */}
+        <Layout currentPage={getCurrentPageName()}>
+          <Routes>
+            {/* ✅ กำหนดเส้นทาง (Routes) ที่นี่ - แก้ Error ได้ 100% */}
+            
+            {/* 1. หน้า Dashboard */}
+            <Route path="/" element={<Dashboard />} />
+            
+            {/* 2. หน้า Project List */}
+            <Route path="/projects" element={<ProjectList />} />
+            
+            {/* 3. หน้า Timeline (รับ ID จาก URL) */}
+            <Route path="/project/:id/timeline" element={<ProjectTimelinePage />} />
+            
+            {/* 4. หน้า Logs */}
+            <Route path="/logs" element={<AuditLogViewer />} />
+            
+            {/* 5. หน้า Notifications */}
+            <Route path="/notifications" element={<NotificationsPage />} />
+            
+            {/* 6. หน้า Profile */}
+            <Route path="/profile" element={<ProfilePage />} />
+
+            {/* ถ้าพิมพ์ URL มั่ว ให้กลับไปหน้าแรก */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </Layout>
-      </ProjectProvider>
-    </NotificationProvider>
+      </NotificationProvider>
+    </ProjectProvider>
   );
 };
 
+// Component หลัก
 const App: React.FC = () => {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    // 🚨 หัวใจสำคัญ: ต้องมี BrowserRouter ครอบบนสุดเสมอ ไม่งั้น Error useNavigate จะมาอีก
+    <BrowserRouter>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </BrowserRouter>
   );
 };
 
