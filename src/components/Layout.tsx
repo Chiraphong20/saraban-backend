@@ -72,8 +72,11 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage }) => {
                     <div className="h-16 flex items-center px-6 border-b border-gray-100 bg-gradient-to-r from-blue-600 to-blue-700">
                         <div className="flex items-center gap-3 text-white">
                             <div className="p-1.5 bg-white/20 rounded-lg backdrop-blur-sm">
-                                <FolderKanban size={24} />
-                            </div>
+<img 
+                    src="/logo.jpg"  // ใส่ Path รูปของคุณตรงนี้
+                    alt="Logo" 
+                    className="w-10 h-10 object-contain" 
+                />                            </div>
                             <div>
                                 <h1 className="font-bold text-lg tracking-wide">Smartjigsaw Project</h1>
                             </div>
