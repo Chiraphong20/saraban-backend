@@ -75,8 +75,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentPage }) => {
                                 <FolderKanban size={24} />
                             </div>
                             <div>
-                                <h1 className="font-bold text-lg tracking-wide">Saraban Project</h1>
-                                <p className="text-[10px] text-blue-100 opacity-90">ระบบบริหารจัดการโครงการ</p>
+                                <h1 className="font-bold text-lg tracking-wide">Smartjigsaw Project</h1>
                             </div>
                         </div>
                         <button 

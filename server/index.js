@@ -176,16 +176,14 @@ app.delete('/api/projects/:id', authenticateToken, (req, res) => {
         });
     });
 });
-
-// ✅ Notification & Audit Logs (เก็บครบ ดึงไปโชว์กระดิ่งได้)
 app.get('/api/notifications', authenticateToken, (req, res) => {
-    const sql = `SELECT id, actor, details, action, timestamp, 'System' AS project_code FROM audit_logs ORDER BY timestamp DESC LIMIT 50`;
+    const sql = `SELECT id, entity_id, actor, details, action, timestamp, 'System' AS project_code FROM audit_logs ORDER BY timestamp DESC LIMIT 50`;
+
     db.query(sql, (err, results) => {
         if (err) return res.status(500).json(err);
         res.json(results);
     });
 });
-
 app.get('/api/audit-logs', authenticateToken, (req, res) => {
     db.query('SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 1000', (err, results) => {
         if (err) return res.status(500).json(err);
