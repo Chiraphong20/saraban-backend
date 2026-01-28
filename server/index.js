@@ -288,6 +288,14 @@ app.delete('/api/notes/:id', authenticateToken, (req, res) => {
         res.json({ message: 'Deleted' });
     });
 });
+// ✅ เพิ่มกลับมาให้แล้วครับ: API สำหรับหน้า Audit Log โดยเฉพาะ
+app.get('/api/audit-logs', authenticateToken, (req, res) => {
+    // ดึงข้อมูลดิบๆ จาก audit_logs ไปแสดงในตาราง Log
+    db.query('SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 1000', (err, results) => {
+        if (err) return res.status(500).json(err);
+        res.json(results);
+    });
+});
 app.put('/api/notes/:id', authenticateToken, (req, res) => {
     db.query('UPDATE quick_notes SET content = ? WHERE id = ? AND created_by = ?', [req.body.content, req.params.id, req.user.username], (err) => {
         if (err) return res.status(500).json(err);
