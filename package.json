@@ -20,7 +20,7 @@
     "html2pdf.js": "^0.14.0",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.561.0",
-    "multer": "^2.0.2",
+    "multer": "^1.4.5-lts.1",
     "mysql2": "^3.16.2",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",

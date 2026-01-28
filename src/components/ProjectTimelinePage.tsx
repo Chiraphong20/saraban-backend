@@ -7,14 +7,24 @@ import {
     ArrowLeft, Calendar, User, 
     Plus, Save, X, Edit2, Trash2, AlertCircle,
     MessageSquare, Clock, Send, Printer, FileDown, 
-    Download, FileText, Paperclip, Image as ImageIcon 
+    FileText, Paperclip, 
+    Image as ImageIcon, 
+    Download 
 } from 'lucide-react';
-import { message, Modal, Dropdown, MenuProps } from 'antd'; 
+// Import Image และ ImageProps จาก antd
+import { message, Modal, Dropdown, MenuProps, Image as AntImage, ImageProps as AntImageProps } from 'antd'; 
 import dayjs from 'dayjs';
 import 'dayjs/locale/th';
 
-// --- Interfaces ---
+// --- ✅ Fix TypeScript: Extended Image Component ---
+// สร้าง Component ใหม่ที่มี Type ถูกต้อง (รับ crossOrigin ได้)
+interface SafeImageProps extends AntImageProps {
+    crossOrigin?: "anonymous" | "use-credentials" | "" | undefined;
+}
+const SafeImage = AntImage as unknown as React.FC<SafeImageProps>;
 
+
+// --- Interfaces ---
 interface ProjectFeature {
     id: number;
     title: string;
@@ -32,9 +42,8 @@ interface FeatureNote {
     content: string;
     created_by: string;
     created_at: string;
-    attachment?: string;       // URL ของไฟล์แนบ
-    attachment_type?: string;  // ประเภทไฟล์
-    attachment_name?: string;  // ชื่อไฟล์เดิม
+    attachment?: string;       
+    attachment_type?: string;  
 }
 
 interface ProjectTimelinePageProps {
@@ -206,8 +215,8 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
             const file = e.target.files[0];
-            if (file.size > 5 * 1024 * 1024) { // Limit 5MB
-                message.error('ไฟล์มีขนาดใหญ่เกิน 5MB');
+            if (file.size > 10 * 1024 * 1024) { // Limit 10MB
+                message.error('ไฟล์มีขนาดใหญ่เกิน 10MB');
                 return;
             }
             setSelectedFile(file);
@@ -227,12 +236,35 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
+    // --- Helper Functions ---
+    const fixUrl = (url: string) => {
+        if (!url) return '';
+        return url.replace(/^http:\/\//i, 'https://');
+    };
+
+    const handleDownloadFile = async (url: string, filename: string) => {
+        try {
+            const httpsUrl = fixUrl(url);
+            const response = await fetch(httpsUrl);
+            const blob = await response.blob();
+            const link = document.createElement('a');
+            link.href = window.URL.createObjectURL(blob);
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        } catch (err) {
+            console.error("Download failed", err);
+            window.open(fixUrl(url), '_blank');
+        }
+    };
+
     // --- Notes Handlers ---
     const openNoteModal = async (feature: ProjectFeature) => {
         setCurrentFeatureForNote(feature);
         setIsNoteModalOpen(true);
         setIsNoteLoading(true);
-        clearSelectedFile(); // Clear file when open
+        clearSelectedFile(); 
         try {
             const res = await axios.get(`https://saraban-backend.onrender.com/api/features/${feature.id}/notes`, {
                 headers: { Authorization: `Bearer ${token}` }
@@ -252,7 +284,6 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
         const hideLoading = message.loading('กำลังส่งข้อมูล...', 0);
 
         try {
-            // ✅ ใช้ FormData เพื่อส่งไฟล์
             const formData = new FormData();
             formData.append('content', newMeetingNote);
             if (selectedFile) {
@@ -264,16 +295,15 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
                 { 
                     headers: { 
                         Authorization: `Bearer ${token}`,
-                        'Content-Type': 'multipart/form-data' // Required for file upload
+                        'Content-Type': 'multipart/form-data'
                     } 
                 }
             );
 
-            // Mock response update UI
             const newNoteObj: FeatureNote = {
                 id: res.data.id || Date.now(),
                 content: newMeetingNote,
-                created_by: user?.fullname || 'Me',
+                created_by: user?.fullname || user?.username || 'Me',
                 created_at: new Date().toISOString(),
                 attachment: res.data.attachment,
                 attachment_type: res.data.attachment_type || (selectedFile ? selectedFile.type : undefined)
@@ -283,15 +313,15 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
             setNewMeetingNote('');
             clearSelectedFile();
             hideLoading();
+            message.success('ส่งบันทึกสำเร็จ');
         } catch (error) {
             hideLoading();
+            console.error("Error sending note:", error);
             message.error("ส่งข้อความไม่สำเร็จ");
         }
     };
 
     // --- 🖨️ Export Handlers ---
-    
-    // 1. Export CSV
     const handleExportCSV = () => {
         if (!project || features.length === 0) {
             message.warning("ไม่มีข้อมูลให้ Export");
@@ -315,7 +345,6 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
         document.body.removeChild(link);
     };
 
-    // 2. Export PDF
     const handleExportPDF = async () => {
         if (!featureNotes || featureNotes.length === 0) {
             message.warning("ไม่มีบันทึกข้อความให้ดาวน์โหลด");
@@ -327,7 +356,6 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
 
         let html2pdf;
         try {
-            // Dynamic import to avoid SSR/Build issues
             html2pdf = (await import('html2pdf.js')).default;
         } catch (e) {
             message.error("ไม่สามารถโหลดไลบรารี PDF ได้");
@@ -338,7 +366,7 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
             margin: 10,
             filename: `Notes_${currentFeatureForNote?.title}_${dayjs().format('YYYYMMDD')}.pdf`,
             image: { type: 'jpeg', quality: 0.98 },
-            html2canvas: { scale: 2, useCORS: true }, // useCORS สำคัญสำหรับรูปภาพ
+            html2canvas: { scale: 2, useCORS: true, logging: true }, 
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         };
 
@@ -632,22 +660,32 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
                                     <div key={note.id} className="flex flex-col animate-slide-up">
                                         <div className="bg-white p-3 rounded-t-xl rounded-br-xl shadow-sm border border-gray-100 self-start max-w-[90%]">
                                             
-                                            {/* ✅ Render รูปภาพ หรือ ไฟล์แนบ */}
+                                            {/* ✅ 1. ใช้ SafeImage แทน AntImage เพื่อ Type Safe */}
                                             {note.attachment && (note.attachment_type?.startsWith('image') || note.attachment.match(/\.(jpeg|jpg|gif|png)$/i)) ? (
                                                 <div className="mb-2">
-                                                    <img 
-                                                        src={note.attachment} 
-                                                        alt="attachment" 
-                                                        className="rounded-lg max-w-full max-h-[200px] object-cover border border-gray-200"
-                                                        loading="lazy"
+                                                    <SafeImage
+                                                        width={200}
+                                                        src={fixUrl(note.attachment)}
+                                                        className="rounded-lg object-cover border border-gray-200"
+                                                        crossOrigin="anonymous" // ตอนนี้ TypeScript จะไม่บ่นแล้ว!
                                                     />
                                                 </div>
                                             ) : note.attachment ? (
-                                                <div className="mb-2 p-2 bg-gray-100 rounded flex items-center gap-2 border border-gray-200">
-                                                    <Paperclip size={16} className="text-gray-500" />
-                                                    <a href={note.attachment} target="_blank" rel="noreferrer" className="text-blue-600 underline text-xs break-all">
-                                                        ไฟล์แนบ (คลิกเพื่อดู)
-                                                    </a>
+                                                // ✅ 2. แสดงไฟล์แนบ พร้อมปุ่ม Download
+                                                <div className="mb-2 p-2 bg-gray-100 rounded flex items-center justify-between gap-2 border border-gray-200">
+                                                    <div className="flex items-center gap-2 overflow-hidden">
+                                                        <Paperclip size={16} className="text-gray-500 flex-shrink-0" />
+                                                        <a href={fixUrl(note.attachment)} target="_blank" rel="noreferrer" className="text-blue-600 underline text-xs truncate">
+                                                            {note.attachment.split('/').pop() || 'ไฟล์แนบ'}
+                                                        </a>
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => handleDownloadFile(note.attachment!, note.attachment!.split('/').pop() || 'download')}
+                                                        className="p-1 text-gray-500 hover:text-blue-600 hover:bg-blue-100 rounded transition-colors"
+                                                        title="ดาวน์โหลด"
+                                                    >
+                                                        <Download size={14} />
+                                                    </button>
                                                 </div>
                                             ) : null}
 
@@ -763,14 +801,14 @@ const ProjectTimelinePage: React.FC<ProjectTimelinePageProps> = ({ projectId, on
                                             {note.created_by}
                                         </td>
                                         <td className="border border-gray-300 p-3 text-gray-800">
-                                            {/* ✅ แสดงรูปใน PDF (ถ้ามี) */}
+                                            {/* ✅ แสดงรูปใน PDF (Fix CORS) */}
                                             {note.attachment && (note.attachment_type?.startsWith('image') || note.attachment.match(/\.(jpeg|jpg|gif|png)$/i)) && (
                                                 <div className="mb-3">
-                                                    <img 
-                                                        src={note.attachment} 
+                                                    <SafeImage
+                                                        src={fixUrl(note.attachment)} 
                                                         alt="img" 
                                                         className="max-w-[200px] h-auto rounded border border-gray-300" 
-                                                        crossOrigin="anonymous" // ป้องกัน PDF ขาว
+                                                        crossOrigin="anonymous" 
                                                     />
                                                 </div>
                                             )}
