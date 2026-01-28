@@ -184,8 +184,10 @@ const ProjectList: React.FC = () => {
                                                 <span className="text-sm text-gray-600">{project.owner}</span>
                                             </div>
                                         </td>
+                                        
+                                        {/* ✅ แก้ไขตรงนี้: เอา Opacity ออก แสดงปุ่มทันที */}
                                         <td className="px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <div className="flex items-center justify-end space-x-2">
                                                 <button 
                                                     onClick={() => handleViewTimeline(project)}
                                                     className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
