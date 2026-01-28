@@ -3,34 +3,26 @@ import { useNotifications } from '../context/NotificationContext';
 import { CheckCircle, Info, XCircle, AlertTriangle, Clock, User, FileText } from 'lucide-react';
 import dayjs from 'dayjs';
 import 'dayjs/locale/th';
+import buddhistEra from 'dayjs/plugin/buddhistEra'; // ✅ Import Plugin พ.ศ.
+
+// ✅ เปิดใช้งาน Plugin พ.ศ.
+dayjs.extend(buddhistEra);
+dayjs.locale('th');
 
 const NotificationsPage: React.FC = () => {
     const { notifications, markAsRead } = useNotifications();
 
-    // เมื่อเข้ามาหน้านี้ ให้ถือว่าอ่านแล้ว (เคลียร์ตัวเลข)
     useEffect(() => {
         markAsRead();
     }, []);
 
-    // Helper: เลือกไอคอน
     const getIcon = (action: string) => {
         switch (action) {
             case 'CREATE': return <CheckCircle size={24} className="text-green-500" />;
             case 'UPDATE': return <Info size={24} className="text-blue-500" />;
             case 'DELETE': return <XCircle size={24} className="text-red-500" />;
-            case 'PLAN': return <FileText size={24} className="text-purple-500" />; // ไอคอนสำหรับ Timeline
+            case 'PLAN': return <FileText size={24} className="text-purple-500" />;
             default: return <AlertTriangle size={24} className="text-yellow-500" />;
-        }
-    };
-
-    // Helper: สีพื้นหลัง
-    const getBgColor = (action: string) => {
-        switch (action) {
-            case 'CREATE': return 'bg-green-50 border-green-100 hover:bg-green-100';
-            case 'UPDATE': return 'bg-blue-50 border-blue-100 hover:bg-blue-100';
-            case 'DELETE': return 'bg-red-50 border-red-100 hover:bg-red-100';
-            case 'PLAN': return 'bg-purple-50 border-purple-100 hover:bg-purple-100';
-            default: return 'bg-gray-50 border-gray-100';
         }
     };
 
@@ -64,22 +56,19 @@ const NotificationsPage: React.FC = () => {
                                 } hover:shadow-md cursor-default bg-white`}
                             >
                                 <div className="flex gap-4">
-                                    {/* Icon Section */}
                                     <div className="mt-1 flex-shrink-0">
                                         {getIcon(log.action)}
                                     </div>
-
-                                    {/* Content Section */}
                                     <div className="flex-1 min-w-0">
                                         <div className="flex justify-between items-start mb-1">
-                                            {/* ✅ ส่วนสำคัญ: แสดงรายละเอียด (details) ที่บันทึกมาจาก ProjectList/Timeline */}
                                             <p className="font-semibold text-gray-800 text-sm md:text-base break-words">
                                                 {log.details || "ไม่มีรายละเอียด"}
                                             </p>
                                             <span className="text-[10px] text-gray-400 flex-shrink-0 flex items-center gap-1 ml-2 bg-gray-50 px-2 py-1 rounded-full">
                                                 <Clock size={12} />
+                                                {/* ✅ ใช้ format 'BBBB' เพื่อแสดง พ.ศ. */}
                                                 {log.timestamp 
-                                                    ? dayjs(log.timestamp).locale('th').format('D MMM BB HH:mm') 
+                                                    ? dayjs(log.timestamp).format('D MMM BBBB HH:mm') 
                                                     : '-'}
                                             </span>
                                         </div>
@@ -98,13 +87,6 @@ const NotificationsPage: React.FC = () => {
                                             }`}>
                                                 {log.action}
                                             </span>
-                                            
-                                            {/* ถ้ามี project_code ให้แสดง (แต่ปัจจุบัน backend ส่งเป็น System) */}
-                                            {log.project_code && log.project_code !== 'System' && (
-                                                <span className="text-xs text-gray-400">
-                                                     Ref: {log.project_code}
-                                                </span>
-                                            )}
                                         </div>
                                     </div>
                                 </div>
