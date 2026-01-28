@@ -1,7 +1,5 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-// 1. ✅ เพิ่มบรรทัดนี้ เพื่อดึง Router มาใช้
-import { BrowserRouter } from 'react-router-dom'; 
 import App from './src/App';
 
 const rootElement = document.getElementById('root');
@@ -12,9 +10,6 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    {/* 2. ✅ ครอบ App ด้วย BrowserRouter ไว้ตรงนี้ */}
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <App />
   </React.StrictMode>
 );
