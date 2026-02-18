@@ -177,12 +177,48 @@ app.delete('/api/projects/:id', authenticateToken, (req, res) => {
         });
     });
 });
+// แก้ไขส่วนนี้ในไฟล์ Node.js ของคุณ
 app.get('/api/notifications', authenticateToken, (req, res) => {
-    const sql = `SELECT id, entity_id, actor, details, action, timestamp, 'System' AS project_code FROM audit_logs ORDER BY timestamp DESC LIMIT 50`;
+    const userId = req.user.id; // ได้มาจาก JWT Token
 
-    db.query(sql, (err, results) => {
+    // SQL นี้จะตรวจสอบว่าในตาราง notification_reads มี id นี้คู่กับ userId นี้หรือยัง
+    const sql = `
+        SELECT 
+            al.id, 
+            al.entity_id, 
+            al.actor, 
+            al.details, 
+            al.action, 
+            al.timestamp, 
+            'System' AS project_code,
+            IF(nr.read_at IS NULL, 0, 1) AS is_read
+        FROM audit_logs al
+        LEFT JOIN notification_reads nr ON al.id = nr.notification_id AND nr.user_id = ?
+        ORDER BY al.timestamp DESC 
+        LIMIT 50
+    `;
+
+    db.query(sql, [userId], (err, results) => {
         if (err) return res.status(500).json(err);
         res.json(results);
+    });
+});
+// เพิ่ม Route ใหม่นี้ลงในไฟล์ Node.js
+app.post('/api/notifications/mark-read', authenticateToken, (req, res) => {
+    const userId = req.user.id;
+    
+    // ดึง ID ของ Notification ทั้งหมดที่ยังไม่ได้อ่านมาบันทึกว่าอ่านแล้ว
+    // หรือส่ง List ของ ID มาจากหน้าบ้านก็ได้ แต่แบบนี้ง่ายที่สุดคือ "อ่านทั้งหมดที่มีตอนนี้"
+    const sql = `
+        INSERT IGNORE INTO notification_reads (user_id, notification_id)
+        SELECT ?, id FROM audit_logs
+        ORDER BY timestamp DESC
+        LIMIT 50
+    `;
+
+    db.query(sql, [userId], (err) => {
+        if (err) return res.status(500).json(err);
+        res.json({ message: 'Marked all as read' });
     });
 });
 app.get('/api/audit-logs', authenticateToken, (req, res) => {

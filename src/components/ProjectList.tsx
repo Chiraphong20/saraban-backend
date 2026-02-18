@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useProjects } from '../context/ProjectContext';
 import { Project, ProjectStatus } from '../types';
-import { Search, Plus, Filter, Edit2, Trash2, FileText, Eye, AlertCircle } from 'lucide-react';
+import { Search, Plus, Filter, Edit2, Trash2, FileText, Eye, AlertCircle, Calendar } from 'lucide-react';
 import ProjectModal from './ProjectModal';
 import { message, Modal } from 'antd'; 
 
@@ -84,16 +84,16 @@ const ProjectList: React.FC = () => {
     };
 
     return (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-6 animate-fade-in pb-20">
             {/* Header Section */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">จัดการโครงการ (Projects)</h1>
-                    <p className="text-gray-500 mt-1">รายการโครงการทั้งหมด {filteredProjects.length} รายการ</p>
+                    <h1 className="text-xl md:text-2xl font-bold text-gray-900">จัดการโครงการ (Projects)</h1>
+                    <p className="text-sm text-gray-500 mt-1">รายการโครงการทั้งหมด {filteredProjects.length} รายการ</p>
                 </div>
                 <button 
                     onClick={handleCreate}
-                    className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200"
+                    className="inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200 text-sm md:text-base"
                 >
                     <Plus size={20} className="mr-2" />
                     เพิ่มโครงการใหม่
@@ -112,12 +112,12 @@ const ProjectList: React.FC = () => {
                         className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" 
                     />
                 </div>
-                <div className="flex items-center space-x-2 min-w-[200px]">
+                <div className="flex items-center space-x-2 md:min-w-[200px]">
                     <Filter className="text-gray-400" size={20} />
                     <select 
                         value={statusFilter} 
                         onChange={(e) => setStatusFilter(e.target.value as ProjectStatus | 'ALL')} 
-                        className="w-full p-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        className="w-full p-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
                     >
                         <option value="IDEA">Idea (ริเริ่ม)</option>
                         <option value="ALL">ทุกสถานะ</option>
@@ -132,8 +132,8 @@ const ProjectList: React.FC = () => {
                 </div>
             </div>
 
-            {/* Table Section */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            {/* ✅ Desktop Table View (Hidden on Mobile) */}
+            <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full whitespace-nowrap">
                         <thead>
@@ -184,8 +184,6 @@ const ProjectList: React.FC = () => {
                                                 <span className="text-sm text-gray-600">{project.owner}</span>
                                             </div>
                                         </td>
-                                        
-                                        {/* ✅ แก้ไขตรงนี้: เอา Opacity ออก แสดงปุ่มทันที */}
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end space-x-2">
                                                 <button 
@@ -217,6 +215,71 @@ const ProjectList: React.FC = () => {
                         </tbody>
                     </table>
                 </div>
+            </div>
+
+            {/* ✅ Mobile Card View (Visible only on Mobile) */}
+            <div className="md:hidden space-y-4">
+                {filteredProjects.length === 0 ? (
+                     <div className="text-center p-8 bg-white rounded-xl border border-dashed border-gray-300 text-gray-400">
+                        <FileText size={32} className="mx-auto mb-2 opacity-50" />
+                        <p>ไม่พบข้อมูลโครงการ</p>
+                     </div>
+                ) : (
+                    filteredProjects.map(project => (
+                        <div key={project.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+                            {/* Card Header: Code & Status */}
+                            <div className="flex justify-between items-start mb-3">
+                                <span className="font-mono text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                                    {project.code}
+                                </span>
+                                <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold border ${getStatusColor(project.status)}`}>
+                                    {project.status}
+                                </span>
+                            </div>
+                            
+                            {/* Card Body: Name & Desc */}
+                            <div className="mb-4">
+                                <h3 className="font-bold text-gray-900 text-lg leading-tight mb-1">{project.name}</h3>
+                                <p className="text-sm text-gray-500 line-clamp-2">{project.description || '-'}</p>
+                            </div>
+                            
+                            {/* Card Info: Budget & Owner */}
+                            <div className="flex justify-between items-center text-sm text-gray-600 mb-4 border-t border-b border-gray-50 py-3 bg-gray-50/50 -mx-4 px-4">
+                                <div className="font-semibold text-gray-700">
+                                    ฿{Number(project.budget).toLocaleString()}
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                    <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold">
+                                        {project.owner.charAt(0)}
+                                    </div>
+                                    <span className="text-xs truncate max-w-[100px]">{project.owner}</span>
+                                </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="grid grid-cols-3 gap-2">
+                                <button 
+                                    onClick={() => handleViewTimeline(project)}
+                                    className="flex items-center justify-center gap-1 py-2 rounded-lg bg-indigo-50 text-indigo-600 text-xs font-medium hover:bg-indigo-100 transition-colors"
+                                >
+                                    <Eye size={14} /> Timeline
+                                </button>
+                                <button 
+                                    onClick={() => handleEdit(project)}
+                                    className="flex items-center justify-center gap-1 py-2 rounded-lg bg-blue-50 text-blue-600 text-xs font-medium hover:bg-blue-100 transition-colors"
+                                >
+                                    <Edit2 size={14} /> แก้ไข
+                                </button>
+                                <button 
+                                    onClick={() => handleDelete(project.id)}
+                                    className="flex items-center justify-center gap-1 py-2 rounded-lg bg-red-50 text-red-600 text-xs font-medium hover:bg-red-100 transition-colors"
+                                >
+                                    <Trash2 size={14} /> ลบ
+                                </button>
+                            </div>
+                        </div>
+                    ))
+                )}
             </div>
 
             {/* Modal สำหรับสร้าง/แก้ไข */}
