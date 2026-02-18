@@ -31,22 +31,23 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
 
 // --- Database Connection ---
 const db = mysql.createConnection({
-    host: 'bcxqbc79bllal1dqsids-mysql.services.clever-cloud.com',
-    user: 'ugkck79inxfxkjrf',     
-    password: 'ckEDWQRFzCx1tCLmv9Gn', 
-    database: 'bcxqbc79bllal1dqsids', 
-    port: 3306,
+    host: 'gateway01.ap-southeast-1.prod.aws.tidbcloud.com',
+    user: '2oAkcq9JFY1KMQW.root',     
+    password: 'sDjOs5ELKfuZYqo3', 
+    database: 'test', 
+    port: 4000,
     enableKeepAlive: true,
     keepAliveInitialDelay: 0,
-    multipleStatements: true
+    multipleStatements: true,
+    ssl: {rejectUnauthorized: false}
 });
 
-db.connect(err => {
-    if (err) console.error('❌ Database connection failed:', err);
-    else {
-        console.log('✅ Connected to MySQL Database');
-        initDatabase();
+db.connect((err) => {
+    if (err) {
+        console.error('❌ Database connection failed:', err);
+        return;
     }
+    console.log('✅ Connected to TiDB Cloud successfully!');
 });
 
 // --- Init Database ---
