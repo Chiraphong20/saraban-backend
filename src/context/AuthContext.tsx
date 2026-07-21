@@ -49,6 +49,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         window.location.href = '/';
     };
 
+    // ✅ Token หมดอายุ/ไม่ถูกต้อง (401/403) -> บังคับ logout แทนที่จะปล่อยให้ request fail เงียบๆ
+    useEffect(() => {
+        const interceptor = axios.interceptors.response.use(
+            (response) => response,
+            (error) => {
+                const status = error?.response?.status;
+                if ((status === 401 || status === 403) && localStorage.getItem('token')) {
+                    logout();
+                }
+                return Promise.reject(error);
+            }
+        );
+        return () => axios.interceptors.response.eject(interceptor);
+    }, []);
+
     // ✅ ฟังก์ชันอัปเดตข้อมูลส่วนตัว (ชื่อ)
     const updateProfile = async (fullname: string) => {
         if (!token) return;
